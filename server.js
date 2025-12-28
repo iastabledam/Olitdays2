@@ -1,3 +1,4 @@
+
 import express from 'express';
 import cors from 'cors';
 import { GoogleGenAI } from "@google/genai";
@@ -102,18 +103,27 @@ app.post('/api/chat', async (req, res) => {
 
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const model = ai.getGenerativeModel({ model: "gemini-pro" });
-
-    const chat = model.startChat({
-      history: history.map(h => ({
-        role: h.role,
-        parts: [{ text: h.text }],
-      })),
+    
+    // Construct contents from history and current message
+    // Note: 'history' array from frontend has { role, text }, we need to map to SDK format
+    const contents = history.map(h => ({
+      role: h.role,
+      parts: [{ text: h.text }],
+    }));
+    contents.push({
+        role: 'user',
+        parts: [{ text: message }]
     });
 
-    const result = await chat.sendMessage(`${propertyContext}\n\nUser: ${message}`);
-    const response = await result.response;
-    res.json({ text: response.text() });
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: contents,
+      config: {
+        systemInstruction: propertyContext
+      }
+    });
+
+    res.json({ text: response.text });
   } catch (error) {
     console.error("Gemini Error:", error);
     res.status(500).json({ error: "AI Service Unavailable" });

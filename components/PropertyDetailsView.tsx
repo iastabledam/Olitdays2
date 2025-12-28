@@ -158,7 +158,6 @@ export const PropertyDetailsView: React.FC<PropertyDetailsViewProps> = ({ proper
     if (propertyId === 'new') {
       const newProp: Property = {
         id: `p-${Date.now()}`,
-        tenantId: 't1', // Default tenant for new property
         name: 'Nouvel hébergement',
         internalName: '',
         address: '',

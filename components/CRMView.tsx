@@ -5,7 +5,7 @@ import { Prospect } from '../types';
 import { 
   Mail, Phone, MoreHorizontal, UserPlus, FileText, CheckCircle, 
   Clock, ArrowRight, FileSignature, Building, Send, ChevronRight, X, 
-  Loader, Sliders, MessageSquare, PlusCircle, ExternalLink, Folder
+  Loader, Sliders, MessageSquare, PlusCircle, ExternalLink, Folder, Key, Shield
 } from 'lucide-react';
 
 export const CRMView: React.FC = () => {
@@ -118,7 +118,19 @@ export const CRMView: React.FC = () => {
 
   const handleSimulateSignature = (id: number) => {
     handleStatusChange(id, 'SIGNED', { signed: true });
-    alert("Webhook reçu : Signature validée ! Le compte propriétaire a été créé automatiquement.");
+    alert("Webhook reçu : Signature validée ! Le statut est passé à SIGNÉ.");
+  };
+
+  const handleSendAccess = (id: number) => {
+      if(!id) return;
+      setIsSimulatingAction(true);
+      setTimeout(() => {
+          const email = selectedProspect?.email || "l'adresse du client";
+          addHistoryItem(id, `Compte créé. Email de bienvenue envoyé à ${email}.`, 'event');
+          setIsSimulatingAction(false);
+          // Explicit message answering "Where does he receive it?"
+          alert(`✅ Compte propriétaire créé avec succès !\n\nUn email contenant le lien de connexion et les identifiants a été envoyé automatiquement à :\n👉 ${email}\n\nLe client peut maintenant se connecter à son Espace Propriétaire.`);
+      }, 1500);
   };
 
   const handleAddNote = () => {
@@ -453,11 +465,33 @@ export const CRMView: React.FC = () => {
                      {selectedProspect.signed && (
                         <div className="ml-6">
                            <p className="text-xs text-green-700 font-medium mb-2">Contrat signé et stocké.</p>
+                        </div>
+                     )}
+                  </div>
+
+                  {/* Step 4: Final Onboarding (Account Creation) */}
+                  <div className={`p-4 rounded-xl border transition-all ${
+                     !selectedProspect.signed ? 'opacity-50 grayscale' : 'bg-white border-indigo-200 shadow-sm'
+                  }`}>
+                     <div className="flex justify-between items-center mb-2">
+                        <h4 className="font-bold text-gray-800 flex items-center">
+                           <Key className="w-4 h-4 mr-2 opacity-70"/> 4. Accès & Bienvenue
+                        </h4>
+                        <div className="bg-indigo-100 text-indigo-600 text-[10px] px-2 py-0.5 rounded font-bold uppercase">Final</div>
+                     </div>
+                     <p className="text-xs text-gray-500 ml-6 mb-3">
+                        Générez le compte propriétaire et envoyez l'email de bienvenue avec les accès au portail.
+                     </p>
+                     
+                     {selectedProspect.signed && (
+                        <div className="ml-6">
                            <button 
-                              onClick={() => setDetailTab('history')}
-                              className="w-full py-2 bg-green-600 text-white rounded-lg font-bold text-sm shadow-md hover:bg-green-700 transition"
+                              onClick={() => handleSendAccess(selectedProspect.id)}
+                              disabled={isSimulatingAction}
+                              className="w-full flex items-center justify-center py-2 bg-indigo-600 text-white rounded-lg font-bold text-sm shadow-md hover:bg-indigo-700 transition"
                            >
-                              Voir le dossier propriétaire
+                              {isSimulatingAction ? <Loader className="w-4 h-4 animate-spin"/> : <Shield className="w-4 h-4 mr-2"/>}
+                              Créer compte & Envoyer accès
                            </button>
                         </div>
                      )}

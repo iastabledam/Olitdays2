@@ -1,4 +1,3 @@
-
 export interface Tenant {
   id: string;
   name: string;
@@ -11,8 +10,8 @@ export interface Tenant {
 }
 
 export enum UserRole {
-  SUPER_ADMIN = 'SUPER_ADMIN', // Platform owner
-  AGENCY_ADMIN = 'AGENCY_ADMIN', // Tenant admin (formerly Super Admin)
+  SUPER_ADMIN = 'SUPER_ADMIN',
+  AGENCY_ADMIN = 'AGENCY_ADMIN',
   OFFICE_MANAGER = 'OFFICE_MANAGER',
   OWNER = 'OWNER',
   CLEANER = 'CLEANER',
@@ -22,7 +21,7 @@ export enum UserRole {
 
 export interface User {
   id: string;
-  tenantId: string; // Multi-tenant link
+  tenantId: string;
   name: string;
   role: UserRole;
   avatar: string;
@@ -32,104 +31,54 @@ export interface User {
 export interface BrandSettings {
   agencyName: string;
   logoUrl?: string;
-  primaryColor: string; // Hex code
-}
-
-export interface BedConfig {
-  type: string;
-  count: number;
-}
-
-export interface RoomConfig {
-  type: string;
-  count: number;
+  primaryColor: string;
 }
 
 export interface CustomFee {
-  id: string;
-  type: string; 
-  name: string; 
-  amount: number;
-  calculationType: 'flat' | 'percent'; 
-  frequency: 'per_stay' | 'per_night' | 'per_person' | 'per_night_per_person';
-  taxable: boolean;
-  shortStayOnly?: boolean;
-}
-
-export interface LocalTax {
   id: string;
   type: string;
   name: string;
   amount: number;
   calculationType: 'flat' | 'percent';
   frequency: 'per_stay' | 'per_night' | 'per_person' | 'per_night_per_person';
-}
-
-export interface VatSetting {
-  enabled: boolean;
-  percentage: number;
-  includedInPrice: boolean;
-}
-
-export interface LengthOfStayRule {
-  id: string;
-  type: 'weekly' | 'monthly' | 'custom';
-  minNights: number;
-  amount: number;
+  taxable: boolean;
+  shortStayOnly?: boolean;
 }
 
 export interface Property {
   id: string;
-  tenantId: string; // Multi-tenant link
-  name: string; 
-  internalName?: string; 
+  tenantId: string;
+  name: string;
+  internalName?: string;
   address: string;
   ownerId: string;
-  imageUrl: string; 
-  photos?: string[]; 
+  imageUrl: string;
+  photos?: string[];
   description?: string;
   status: 'active' | 'maintenance';
-  
   propertyType?: 'apartment' | 'house' | 'villa' | 'chalet' | 'bnb';
-  surface?: number; 
-  surfaceUnit?: 'm2' | 'ft2'; 
+  surface?: number;
+  surfaceUnit?: 'm2' | 'ft2';
   maxGuests?: number;
   bedrooms?: number;
   bathrooms?: number;
-  
-  roomsComposition?: RoomConfig[];
-  bedsDistribution?: BedConfig[];
-
   wifiSsid?: string;
   wifiPwd?: string;
   accessCode?: string;
-  
   amenities?: string[];
-  
   pricing?: {
     basePrice: number;
     currency: string;
     weekendPrice?: number;
     minStay?: number;
     securityDeposit?: number;
-    vatNumber?: string; 
-    registrationNumber?: string; 
-    vatSetting?: VatSetting;
-    localTaxes?: LocalTax[];
-    extraGuestFee?: number;
-    extraGuestThreshold?: number; 
-    shortStayFee?: number;
-    shortStayDuration?: number; 
     fees?: CustomFee[];
-    lengthOfStayRules?: LengthOfStayRule[];
-    lengthOfStayDiscounts?: { duration: string; discount: string }[];
-    taxes?: { name: string; percentage: number }[];
   };
 }
 
 export interface Reservation {
   id: string;
-  tenantId: string; // Multi-tenant link
+  tenantId: string;
   propertyId: string;
   guestName: string;
   startDate: string;
@@ -143,13 +92,13 @@ export interface Reservation {
 
 export interface GuestProfile {
   id: string;
-  tenantId: string; // Multi-tenant link
+  tenantId: string;
   fullName: string;
   email?: string;
   phone?: string;
   nationality?: string;
   avatar?: string;
-  tags: string[]; 
+  tags: string[];
   notes?: string;
   totalSpent: number;
   stayCount: number;
@@ -175,7 +124,7 @@ export enum TaskStatus {
 
 export interface Task {
   id: string;
-  tenantId: string; // Multi-tenant link
+  tenantId: string;
   type: TaskType;
   propertyId: string;
   assigneeId?: string;
@@ -183,7 +132,7 @@ export interface Task {
   status: TaskStatus;
   description: string;
   laundryItems?: { item: string; quantity: number }[];
-  proofPhotos?: string[]; 
+  proofPhotos?: string[];
 }
 
 export enum IncidentStatus {
@@ -202,37 +151,37 @@ export enum IncidentPriority {
 
 export interface Incident {
   id: string;
-  tenantId: string; // Multi-tenant link
+  tenantId: string;
   title: string;
   description: string;
   propertyId: string;
-  reservationId?: string; 
+  reservationId?: string;
   guestName?: string;
   reportedAt: string;
   status: IncidentStatus;
   priority: IncidentPriority;
   category: 'WIFI' | 'PLUMBING' | 'ELECTRICITY' | 'CLEANING' | 'ACCESS' | 'OTHER';
-  assignedTo?: string; 
+  assignedTo?: string;
   photos?: string[];
-  messages?: { text: string, author: string, date: string }[];
+  messages?: { text: string; author: string; date: string }[];
 }
 
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'model'; 
+  role: 'user' | 'model';
   text: string;
   timestamp: number;
 }
 
 export interface Conversation {
   id: string;
-  tenantId: string; // Multi-tenant link
+  tenantId: string;
   guestName: string;
   guestAvatar?: string;
   guestEmail?: string;
   guestPhone?: string;
   propertyId: string;
-  reservationId?: string; 
+  reservationId?: string;
   platform: 'Airbnb' | 'Booking' | 'Direct' | 'Vrbo';
   status: 'inquiry' | 'booked' | 'staying' | 'past';
   messages: ChatMessage[];
@@ -243,7 +192,7 @@ export interface Conversation {
 
 export interface LaundryOrder {
   id: string;
-  tenantId: string; // Multi-tenant link
+  tenantId: string;
   date: string;
   sender: string;
   receiver: string;
@@ -251,17 +200,9 @@ export interface LaundryOrder {
   status: 'PENDING' | 'ACCEPTED' | 'REFUSED' | 'DELIVERED';
 }
 
-export interface ProspectDocument {
-  id: string;
-  name: string;
-  url: string;
-  type: 'pdf' | 'doc' | 'image' | 'folder';
-  date: string;
-}
-
 export interface Prospect {
   id: number;
-  tenantId: string; // Multi-tenant link
+  tenantId: string;
   name: string;
   email: string;
   phone: string;
@@ -275,5 +216,5 @@ export interface Prospect {
   signed: boolean;
   commissionRate?: number;
   contractStartDate?: string;
-  documents?: ProspectDocument[];
+  documents?: { id: string; name: string; url: string; type: 'pdf' | 'doc' | 'image' | 'folder'; date: string }[];
 }

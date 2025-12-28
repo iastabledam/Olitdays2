@@ -42,7 +42,6 @@ export const PropertiesView: React.FC<PropertiesViewProps> = ({
     setTimeout(() => {
       const mockImportedProperty: Property = {
         id: `p-new-${Date.now()}`,
-        tenantId: 't1', // Default tenant
         name: "Superbe Loft Vue Mer (Import Airbnb)",
         address: "Promenade des Anglais, Nice",
         ownerId: 'u3',
@@ -261,7 +260,7 @@ export const PropertiesView: React.FC<PropertiesViewProps> = ({
           </div>
       )}
 
-      {/* --- IMPORT MODAL (Kept in code but triggered optionally if needed later) --- */}
+      {/* --- IMPORT MODAL --- */}
       {isImportModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl transform transition-all">

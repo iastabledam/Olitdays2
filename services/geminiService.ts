@@ -1,38 +1,47 @@
-// This service now connects to the Node.js backend (server.js)
-// This is more secure as the API Key is kept on the server side.
 
-const API_URL = 'http://localhost:3000/api';
+import { GoogleGenAI } from "@google/genai";
+
+// Initialize Gemini Client
+// Note: In a production environment, API calls should ideally go through a backend proxy 
+// to secure the API Key, but for this frontend implementation we use it directly.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const chatWithConcierge = async (
   message: string,
   history: { role: 'user' | 'model'; text: string }[],
-  propertyDetails: string
+  systemInstruction: string
 ): Promise<string> => {
   
   try {
-    // We call the Node.js backend endpoint
-    const response = await fetch(`${API_URL}/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        message,
-        history,
-        propertyContext: propertyDetails,
-      }),
+    const model = 'gemini-3-flash-preview';
+
+    // Convert history to the format expected by the SDK
+    // The SDK expects 'user' and 'model' roles.
+    const contents = history.map(msg => ({
+      role: msg.role,
+      parts: [{ text: msg.text }],
+    }));
+
+    // Add the current user message to the conversation history for the API call
+    contents.push({
+      role: 'user',
+      parts: [{ text: message }]
     });
 
-    if (!response.ok) {
-      throw new Error(`Server error: ${response.status}`);
-    }
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: contents,
+      config: {
+        systemInstruction: systemInstruction,
+        temperature: 0.7, // Slightly creative but focused
+        // maxOutputTokens removed to comply with guidelines for thinking models
+      }
+    });
 
-    const data = await response.json();
-    return data.text;
+    return response.text || "Désolé, je n'ai pas pu générer de réponse pour le moment.";
+
   } catch (error) {
-    console.error("Backend Connection Error:", error);
-    
-    // Fallback message if the Node.js server isn't running in the preview
-    return "⚠️ Le serveur Node.js semble déconnecté. Pour utiliser l'IA, assurez-vous de lancer 'node server.js' dans votre terminal, ou migrez ce code vers Next.js comme prévu !";
+    console.error("Gemini API Error:", error);
+    return "⚠️ Service momentanément indisponible. Veuillez contacter votre hôte directement en cas d'urgence.";
   }
 };

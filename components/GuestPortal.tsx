@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MOCK_PROPERTIES, MOCK_RESERVATIONS } from '../constants';
 import { chatWithConcierge } from '../services/geminiService';
 import { ChatMessage, Reservation, Property, Incident, IncidentStatus, IncidentPriority } from '../types';
@@ -49,6 +49,9 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [incidentReply, setIncidentReply] = useState('');
   
+  // Chat Scroll Ref
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
   // Filter incidents for this reservation
   const myIncidents = (incidents || []).filter(inc => 
       inc.reservationId === reservation.id || inc.guestName === reservation.guestName
@@ -56,10 +59,15 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
 
   // --- CHAT STATE ---
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: '1', role: 'model', text: `Bonjour ${reservation.guestName.split(' ')[0]} ! Je suis votre concierge virtuel pour ${property.name}. Comment puis-je vous aider aujourd'hui ?`, timestamp: Date.now() }
+    { id: '1', role: 'model', text: `Bonjour ${reservation.guestName.split(' ')[0]} ! Je suis votre concierge virtuel pour ${property.name}. Je connais tous les détails du logement (Wifi, accès, équipements). Comment puis-je vous aider ?`, timestamp: Date.now() }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Scroll to bottom on new message
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, chatOpen]);
 
   // --- PREMIUM SERVICES DATA ---
   const servicesData = {
@@ -171,17 +179,39 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
     setInput('');
     setLoading(true);
 
-    const propertyContext = `
-      Nom: ${property.name}
-      Adresse: ${property.address}
-      Wifi SSID: ${property.wifiSsid}
-      Wifi MDP: ${property.wifiPwd}
-      Code Boîte à Clé: ${property.accessCode || 'Non défini'}
-      Règles: Pas de fête, non fumeur, check-out 11h.
+    // Build rich context for the AI
+    const systemInstruction = `
+      Tu es l'assistant concierge virtuel intelligent pour le logement "${property.name}".
+      Ton but est d'aider le voyageur (${reservation.guestName}) durant son séjour de manière autonome.
+      
+      Voici les informations DÉTAILLÉES sur la propriété (utilise-les pour répondre) :
+      - Adresse : ${property.address}
+      - Type : ${property.propertyType || 'Logement entier'}
+      - Wifi Réseau (SSID) : "${property.wifiSsid || 'Non renseigné'}"
+      - Wifi Mot de passe : "${property.wifiPwd || 'Non renseigné'}"
+      - Code Boîte à Clé / Entrée : ${property.accessCode || 'Contacter l\'hôte'}
+      - Description du logement : ${property.description || 'Non renseignée'}
+      - Capacité : ${property.maxGuests} personnes
+      - Équipements disponibles : ${property.amenities?.join(', ') || 'Non spécifiés'}
+      
+      Règles de la maison :
+      - Heure d'arrivée (Check-in) : 15h00
+      - Heure de départ (Check-out) : 11h00
+      - Interdiction de fumer à l'intérieur.
+      - Pas de fêtes ni de nuisances sonores après 22h.
+      
+      Instructions pour l'IA :
+      1. Sois poli, chaleureux, serviable et concis.
+      2. Réponds directement aux questions sur le Wifi, l'accès, ou les équipements en utilisant les données ci-dessus.
+      3. Si on te demande un code ou une info qui est "Non renseigné" ou "Non défini", excuse-toi et suggère de contacter l'hôte via le bouton "Signaler".
+      4. Si le voyageur signale un problème grave (fuite, urgence), conseille-lui d'utiliser le bouton "Signaler un problème" de l'application ou d'appeler les urgences si nécessaire.
+      5. Tu peux suggérer des services premium (petit-déjeuner, ménage, transport) si le contexte s'y prête.
     `;
 
-    const history = messages.map(m => ({ role: m.role, text: m.text }));
-    const responseText = await chatWithConcierge(userMsg.text, history, propertyContext);
+    // Only send the last few messages to keep context window clean/cheap
+    const history = messages.slice(-10).map(m => ({ role: m.role, text: m.text }));
+    
+    const responseText = await chatWithConcierge(userMsg.text, history, systemInstruction);
     
     const botMsg: ChatMessage = { id: (Date.now() + 1).toString(), role: 'model', text: responseText, timestamp: Date.now() };
     setMessages(prev => [...prev, botMsg]);
@@ -193,7 +223,6 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
       
       const newIncident: Incident = {
           id: `inc-${Date.now()}`,
-          tenantId: property.tenantId, // Ensure tenantId is passed from property
           title: 'Signalement Voyageur',
           description: incidentDescription,
           propertyId: property.id,
@@ -490,10 +519,11 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
                  {loading && (
                     <div className="flex justify-start">
                       <div className="bg-gray-200 px-3 py-1.5 rounded-full text-xs text-gray-500 animate-pulse">
-                        Écrit...
+                        L'assistant écrit...
                       </div>
                     </div>
                  )}
+                 <div ref={messagesEndRef} />
                </div>
 
                <div className="p-3 bg-white border-t">
@@ -503,7 +533,7 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
                      value={input}
                      onChange={(e) => setInput(e.target.value)}
                      onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                     placeholder="Une question ?"
+                     placeholder="Posez une question sur le logement..."
                      className="flex-1 bg-gray-100 border-none rounded-full px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                    />
                    <button 

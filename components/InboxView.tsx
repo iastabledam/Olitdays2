@@ -120,7 +120,6 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
       
       const newTicket: Incident = {
           id: `inc-${Date.now()}`,
-          tenantId: selectedProperty.tenantId, // Inherit tenant from property
           title: 'Ticket créé depuis la messagerie',
           description: 'Problème signalé par le client via le chat.',
           propertyId: selectedProperty.id,
