@@ -1,3 +1,4 @@
+
 export interface Tenant {
   id: string;
   name: string;
@@ -32,6 +33,27 @@ export interface BrandSettings {
   agencyName: string;
   logoUrl?: string;
   primaryColor: string;
+  taxDisplay?: 'gross' | 'net'; // 'gross' = TTC (Europe), 'net' = HT (USA)
+}
+
+export interface GlobalPolicy {
+  id: string;
+  name: string;
+  paymentSchedule: '1_payment' | '2_payments';
+  payment1Percentage: number;
+  payment1Timing: 'at_booking' | 'before_arrival';
+  payment1DaysBefore?: number;
+  cancellationPolicy: 'flexible' | 'moderate' | 'strict' | 'non_refundable';
+  securityDepositType: 'none' | 'fixed';
+  securityDepositAmount?: number;
+  quoteExpirationHours: number;
+}
+
+export interface ImportedCalendar {
+  id: string;
+  name: string; // "Airbnb", "Booking", etc.
+  url: string;
+  lastSynced?: string;
 }
 
 export interface CustomFee {
@@ -43,6 +65,38 @@ export interface CustomFee {
   frequency: 'per_stay' | 'per_night' | 'per_person' | 'per_night_per_person';
   taxable: boolean;
   shortStayOnly?: boolean;
+}
+
+export interface RoomConfig {
+  type: string;
+  count: number;
+}
+
+export interface BedConfig {
+  type: string;
+  count: number;
+}
+
+export interface LengthOfStayRule {
+  id: string;
+  type: 'weekly' | 'monthly' | 'custom';
+  minNights: number;
+  amount: number;
+}
+
+export interface LocalTax {
+  id: string;
+  type: string;
+  name: string;
+  amount: number;
+  calculationType: 'flat' | 'percent';
+  frequency: 'per_stay' | 'per_night' | 'per_person' | 'per_night_per_person';
+}
+
+export interface VatSetting {
+  enabled: boolean;
+  percentage: number;
+  includedInPrice: boolean;
 }
 
 export interface Property {
@@ -65,7 +119,24 @@ export interface Property {
   wifiSsid?: string;
   wifiPwd?: string;
   accessCode?: string;
+  accessVideoUrl?: string; // NEW FIELD
   amenities?: string[];
+  roomsComposition?: RoomConfig[];
+  bedsDistribution?: BedConfig[];
+  
+  // Calendars (iCal)
+  importedCalendars?: ImportedCalendar[];
+
+  // Policies & Rules
+  checkInTime?: string;
+  checkOutTime?: string;
+  cancellationPolicy?: 'flexible' | 'moderate' | 'strict' | 'non_refundable';
+  houseRules?: string;
+  minAge?: number;
+  petsAllowed?: boolean;
+  smokingAllowed?: boolean;
+  eventsAllowed?: boolean;
+
   pricing?: {
     basePrice: number;
     currency: string;
@@ -73,6 +144,15 @@ export interface Property {
     minStay?: number;
     securityDeposit?: number;
     fees?: CustomFee[];
+    vatSetting?: VatSetting;
+    localTaxes?: LocalTax[];
+    lengthOfStayRules?: LengthOfStayRule[];
+    extraGuestFee?: number;
+    extraGuestThreshold?: number;
+    shortStayFee?: number;
+    shortStayDuration?: number;
+    vatNumber?: string;
+    registrationNumber?: string;
   };
 }
 
@@ -85,7 +165,7 @@ export interface Reservation {
   endDate: string;
   status: 'confirmed' | 'checked-in' | 'checked-out' | 'cancelled';
   totalAmount: number;
-  platform: 'Airbnb' | 'Booking' | 'Direct';
+  platform: 'Airbnb' | 'Booking' | 'Direct' | 'Vrbo';
   keyCodeSent?: boolean;
   guestLinkSent?: boolean;
 }

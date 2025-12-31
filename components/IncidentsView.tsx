@@ -386,7 +386,7 @@ export const IncidentsView: React.FC<IncidentsViewProps> = ({ onNavigateToProper
                                   <input 
                                       type="text" 
                                       placeholder="Écrire une réponse au client..." 
-                                      className="flex-1 border border-gray-300 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                      className="flex-1 border border-gray-300 rounded-full px-4 py-2 text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                       value={replyText}
                                       onChange={(e) => setReplyText(e.target.value)}
                                       onKeyDown={(e) => e.key === 'Enter' && handleSendReply()}

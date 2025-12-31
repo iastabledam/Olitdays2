@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
@@ -6,12 +6,18 @@ console.log('--- SYSTEME DE LA PLATEFORME ---');
 console.log('STATUS: CORRIGÉ');
 console.log('React Version:', React.version);
 
+interface ErrorBoundaryProps {
+  children?: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
 // Error Boundary simplifiée pour attraper les crashs
-class ErrorBoundary extends React.Component<any, { hasError: boolean, error: Error | null }> {
-  constructor(props: any) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  public state: ErrorBoundaryState = { hasError: false, error: null };
 
   static getDerivedStateFromError(error: Error) {
     return { hasError: true, error };
@@ -36,7 +42,7 @@ class ErrorBoundary extends React.Component<any, { hasError: boolean, error: Err
       );
     }
 
-    return this.props.children;
+    return (this as any).props.children;
   }
 }
 

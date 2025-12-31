@@ -543,7 +543,7 @@ export const CRMView: React.FC = () => {
                       {/* Add Note Input */}
                       <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
                           <textarea 
-                            className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none mb-2"
+                            className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm text-gray-900 focus:ring-2 focus:ring-indigo-500 outline-none resize-none mb-2"
                             rows={3}
                             placeholder="Écrire une note (appel, email, détails)..."
                             value={newNote}
@@ -601,7 +601,7 @@ export const CRMView: React.FC = () => {
                           <label className="block text-sm font-medium text-gray-700 mb-1">Commission Agence (%)</label>
                           <input 
                             type="number" 
-                            className="w-full border border-gray-300 rounded-lg p-2"
+                            className="w-full border border-gray-300 rounded-lg p-2 bg-white text-gray-900"
                             value={contractConfig.commission}
                             onChange={(e) => setContractConfig({...contractConfig, commission: parseInt(e.target.value)})}
                           />
@@ -610,7 +610,7 @@ export const CRMView: React.FC = () => {
                           <label className="block text-sm font-medium text-gray-700 mb-1">Date de début</label>
                           <input 
                             type="date" 
-                            className="w-full border border-gray-300 rounded-lg p-2"
+                            className="w-full border border-gray-300 rounded-lg p-2 bg-white text-gray-900"
                             value={contractConfig.startDate}
                             onChange={(e) => setContractConfig({...contractConfig, startDate: e.target.value})}
                           />
@@ -618,7 +618,7 @@ export const CRMView: React.FC = () => {
                       <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Durée (mois)</label>
                           <select 
-                            className="w-full border border-gray-300 rounded-lg p-2"
+                            className="w-full border border-gray-300 rounded-lg p-2 bg-white text-gray-900"
                             value={contractConfig.duration}
                             onChange={(e) => setContractConfig({...contractConfig, duration: parseInt(e.target.value)})}
                           >

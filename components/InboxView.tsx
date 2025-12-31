@@ -7,7 +7,7 @@ import {
   MoreVertical, Phone, Mail, Calendar, MapPin, 
   Edit2, User, MessageSquare, Check, X,
   Key, RefreshCw, Smartphone, ExternalLink, Link, Archive, Folder,
-  AlertTriangle, Plus
+  AlertTriangle, Plus, ArrowLeft, Copy
 } from 'lucide-react';
 
 const PlatformIcon = ({ platform }: { platform: string }) => {
@@ -29,7 +29,10 @@ interface InboxViewProps {
 }
 
 export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateConversations, properties, reservations, guests, onNavigateToGuest, onNavigateToGuestPortal, onNavigateToIncidents }) => {
-  const [selectedId, setSelectedId] = useState<string | null>(conversations.length > 0 ? conversations[0].id : null);
+  // Initialize with null on mobile to show list first, or first item on desktop
+  const [selectedId, setSelectedId] = useState<string | null>(
+      window.innerWidth >= 768 && conversations.length > 0 ? conversations[0].id : null
+  );
   const [filterText, setFilterText] = useState('');
   const [inputText, setInputText] = useState('');
   const [notes, setNotes] = useState('');
@@ -94,14 +97,11 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
 
   const handleGoToGuestProfile = () => {
       if (!selectedConversation) return;
-      
-      // Match guest by Name (since mock conversations don't strictly have IDs link)
       const guest = guests.find(g => g.fullName === selectedConversation.guestName);
-      
       if (guest) {
           onNavigateToGuest(guest.id);
       } else {
-          alert("Profil voyageur introuvable pour ce nom. Assurez-vous qu'il a bien été importé dans le CRM.");
+          alert("Profil voyageur introuvable.");
       }
       setShowMenu(false);
   };
@@ -110,7 +110,7 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
       if (selectedReservation?.id && onNavigateToGuestPortal) {
           onNavigateToGuestPortal(selectedReservation.id);
       } else {
-          alert("Aucune réservation active associée à cette conversation pour ouvrir le portail.");
+          alert("Aucune réservation active pour ce portail.");
       }
       setShowMenu(false);
   };
@@ -120,7 +120,8 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
       
       const newTicket: Incident = {
           id: `inc-${Date.now()}`,
-          title: 'Ticket créé depuis la messagerie',
+          tenantId: selectedConversation.tenantId,
+          title: 'Ticket depuis la messagerie',
           description: 'Problème signalé par le client via le chat.',
           propertyId: selectedProperty.id,
           reservationId: selectedReservation?.id,
@@ -136,13 +137,22 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
       alert("Un ticket d'incident a été créé !");
   };
 
+  const handleCopyLink = () => {
+      if(!selectedReservation) return;
+      
+      // Construct the deep link
+      const link = `${window.location.origin}${window.location.pathname}?guest_ref=${selectedReservation.id}`;
+      
+      navigator.clipboard.writeText(link).then(() => {
+          alert("Lien copié dans le presse-papier !\n\nCollez ce lien dans un nouvel onglet pour tester la vue voyageur.");
+      });
+  };
+
   // --- AUTOMATION ACTIONS ---
 
   const handleSendKeyCode = () => {
     if (!selectedConversation) return;
     setSendingCode(true);
-    
-    // Simulate n8n webhook call to send message via Airbnb API
     setTimeout(() => {
         const newMessage: ChatMessage = {
             id: Date.now().toString(),
@@ -150,16 +160,12 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
             text: `(Auto) Bonjour ${selectedConversation.guestName.split(' ')[0]}, voici votre code d'accès pour la boîte à clé : ${selectedProperty?.accessCode || '1234'}. Bon séjour !`,
             timestamp: Date.now()
         };
-        
         const updatedConversations = conversations.map(c => {
             if (c.id === selectedId) return { ...c, messages: [...c.messages, newMessage] };
             return c;
         });
         onUpdateConversations(updatedConversations);
-        
-        // In real app, we would update reservation.keyCodeSent = true via API
         if(selectedReservation) selectedReservation.keyCodeSent = true;
-        
         setSendingCode(false);
     }, 1500);
   };
@@ -167,15 +173,11 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
   const handleSendWhatsappLink = () => {
       if (!selectedConversation || !selectedReservation) return;
       setSendingWhatsapp(true);
-      
       const guestLink = `https://app.hostflow.com/guest/${selectedReservation.id}`;
-      const message = `Bonjour ${selectedConversation.guestName.split(' ')[0]} ! Voici votre espace voyageur personnel pour votre séjour à ${selectedProperty?.name} : ${guestLink}. Vous y trouverez le guide, les services et le WiFi. À bientôt !`;
+      const message = `Bonjour ${selectedConversation.guestName.split(' ')[0]} ! Voici votre espace voyageur personnel : ${guestLink}. À bientôt !`;
       const encodedMsg = encodeURIComponent(message);
-      
-      // Simulate delay then open WhatsApp
       setTimeout(() => {
           setSendingWhatsapp(false);
-          // In real app, update state: selectedReservation.guestLinkSent = true;
           selectedReservation.guestLinkSent = true; 
           window.open(`https://wa.me/?text=${encodedMsg}`, '_blank');
       }, 1000);
@@ -185,7 +187,8 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
     <div className="flex h-[calc(100vh-100px)] bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
       
       {/* 1. LEFT SIDEBAR: Conversation List */}
-      <div className="w-80 border-r border-gray-200 flex flex-col bg-gray-50/50">
+      {/* Mobile Logic: Hidden if a conversation is selected */}
+      <div className={`w-full md:w-80 border-r border-gray-200 flex-col bg-gray-50/50 ${selectedId ? 'hidden md:flex' : 'flex'}`}>
         
         {/* Header / Filter */}
         <div className="p-4 border-b border-gray-200 bg-white">
@@ -196,7 +199,7 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
                <input 
                  type="text" 
                  placeholder="Rechercher..." 
-                 className="w-full pl-9 pr-3 py-2 bg-gray-100 border-none rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                 className="w-full pl-9 pr-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-indigo-500 outline-none"
                  value={filterText}
                  onChange={(e) => setFilterText(e.target.value)}
                />
@@ -211,7 +214,6 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
              <button className="px-3 py-1 bg-gray-800 text-white text-xs rounded-full whitespace-nowrap">Tous</button>
              <button className="px-3 py-1 bg-white border border-gray-200 text-gray-600 text-xs rounded-full whitespace-nowrap hover:border-gray-300">Non lus</button>
              <button className="px-3 py-1 bg-white border border-gray-200 text-gray-600 text-xs rounded-full whitespace-nowrap hover:border-gray-300">À venir</button>
-             <button className="px-3 py-1 bg-white border border-gray-200 text-gray-600 text-xs rounded-full whitespace-nowrap hover:border-gray-300">En cours</button>
            </div>
         </div>
 
@@ -262,12 +264,21 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
       </div>
 
       {/* 2. CENTER: Chat Area */}
-      <div className="flex-1 flex flex-col bg-white min-w-0">
+      {/* Mobile Logic: Only shown if conversation selected */}
+      <div className={`flex-1 flex-col bg-white min-w-0 ${selectedId ? 'flex' : 'hidden md:flex'}`}>
         {selectedConversation ? (
           <>
             {/* Chat Header */}
-            <div className="h-16 border-b border-gray-200 flex items-center justify-between px-6 bg-white shrink-0">
+            <div className="h-16 border-b border-gray-200 flex items-center justify-between px-4 md:px-6 bg-white shrink-0">
                <div className="flex items-center gap-3">
+                  {/* Back Button (Mobile Only) */}
+                  <button 
+                    onClick={() => setSelectedId(null)}
+                    className="md:hidden p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-full"
+                  >
+                    <ArrowLeft className="w-5 h-5" />
+                  </button>
+
                   <div 
                     onClick={handleGoToGuestProfile} 
                     className="relative cursor-pointer group"
@@ -277,18 +288,17 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
                       <div className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/10 transition"></div>
                   </div>
                   <div>
-                    <h3 onClick={handleGoToGuestProfile} className="font-bold text-gray-900 cursor-pointer hover:text-indigo-600 transition">{selectedConversation.guestName}</h3>
+                    <h3 onClick={handleGoToGuestProfile} className="font-bold text-gray-900 cursor-pointer hover:text-indigo-600 transition truncate max-w-[150px]">{selectedConversation.guestName}</h3>
                     <div className="flex items-center text-xs text-gray-500">
                       <span className="flex items-center mr-2">
                          <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
                          En ligne
                       </span>
-                      • Temps de réponse : &lt; 1h
                     </div>
                   </div>
                </div>
                <div className="flex items-center gap-2">
-                 <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full">
+                 <button className="hidden md:block p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full">
                    <Phone className="w-5 h-5" />
                  </button>
                  
@@ -318,12 +328,6 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
                                      <ExternalLink className="w-4 h-4 mr-2 text-indigo-600" />
                                      Voir le portail voyageur
                                  </button>
-                                 <button 
-                                   className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
-                                 >
-                                     <Archive className="w-4 h-4 mr-2 text-gray-400" />
-                                     Archiver la conversation
-                                 </button>
                              </div>
                          </div>
                      )}
@@ -332,11 +336,11 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 bg-slate-50">
                {selectedConversation.messages.map((msg, idx) => (
                  <div key={idx} className={`flex ${msg.role === 'model' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[70%] ${msg.role === 'model' ? 'flex flex-col items-end' : 'flex flex-col items-start'}`}>
-                       <div className={`p-4 rounded-2xl shadow-sm text-sm leading-relaxed ${
+                    <div className={`max-w-[85%] md:max-w-[70%] ${msg.role === 'model' ? 'flex flex-col items-end' : 'flex flex-col items-start'}`}>
+                       <div className={`p-3 md:p-4 rounded-2xl shadow-sm text-sm leading-relaxed ${
                          msg.role === 'model' 
                            ? 'bg-indigo-600 text-white rounded-br-none' 
                            : 'bg-white text-gray-800 border border-gray-200 rounded-bl-none'
@@ -353,8 +357,8 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
 
             {/* Input Area */}
             <div className="p-4 border-t border-gray-200 bg-white">
-               {/* Toolbar */}
-               <div className="flex items-center gap-2 mb-2">
+               {/* Toolbar - Hidden on small mobile to save space */}
+               <div className="hidden md:flex items-center gap-2 mb-2">
                   <button 
                     className="flex items-center px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-medium hover:bg-indigo-100 transition"
                     onClick={handleAiGenerate}
@@ -370,8 +374,8 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
                
                <div className="relative">
                  <textarea 
-                   className="w-full border border-gray-300 rounded-xl pl-4 pr-12 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
-                   rows={3}
+                   className="w-full border border-gray-300 rounded-xl pl-4 pr-12 py-3 text-sm bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                   rows={2}
                    placeholder="Écrivez votre message..."
                    value={inputText}
                    onChange={(e) => setInputText(e.target.value)}
@@ -383,9 +387,6 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
                    }}
                  />
                  <div className="absolute bottom-3 right-3 flex gap-2">
-                    <button className="p-1.5 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100">
-                      <Paperclip className="w-4 h-4" />
-                    </button>
                     <button 
                       onClick={handleSendMessage}
                       className={`p-1.5 rounded-lg transition-colors ${inputText.trim() ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
@@ -393,10 +394,6 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
                       <Send className="w-4 h-4" />
                     </button>
                  </div>
-               </div>
-               <div className="mt-2 flex justify-between text-xs text-gray-400">
-                 <span>Appuyez sur Entrée pour envoyer</span>
-                 <span className="flex items-center"><PlatformIcon platform={selectedConversation.platform} /><span className="ml-1 text-gray-500">via API</span></span>
                </div>
             </div>
           </>
@@ -409,8 +406,9 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
       </div>
 
       {/* 3. RIGHT SIDEBAR: Details */}
+      {/* Hidden on Mobile/Tablet (lg breakpoint) */}
       {selectedConversation && (
-        <div className="w-80 border-l border-gray-200 bg-white flex flex-col overflow-y-auto">
+        <div className="hidden lg:flex w-80 border-l border-gray-200 bg-white flex-col overflow-y-auto">
            {/* Reservation Card */}
            <div className="p-6 border-b border-gray-100">
              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Réservation {selectedReservation?.id || 'N/A'}</h3>
@@ -453,36 +451,25 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
              </div>
            </div>
 
-           {/* --- INCIDENTS SECTION (NEW) --- */}
+           {/* --- INCIDENTS SECTION --- */}
            <div className="p-6 border-b border-gray-100">
               <div className="flex justify-between items-center mb-4">
                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Tickets Support</h3>
-                 <button 
-                    onClick={handleCreateTicket}
-                    className="text-xs text-indigo-600 font-bold hover:underline flex items-center"
-                 >
+                 <button onClick={handleCreateTicket} className="text-xs text-indigo-600 font-bold hover:underline flex items-center">
                     <Plus className="w-3 h-3 mr-1" /> Créer
                  </button>
               </div>
-
               <div className="space-y-2">
                  {activeIncidents.length > 0 ? (
                     activeIncidents.map(inc => (
-                        <div 
-                            key={inc.id} 
-                            onClick={onNavigateToIncidents}
-                            className="bg-red-50 border border-red-100 rounded-lg p-3 cursor-pointer hover:bg-red-100 transition"
-                        >
+                        <div key={inc.id} onClick={onNavigateToIncidents} className="bg-red-50 border border-red-100 rounded-lg p-3 cursor-pointer hover:bg-red-100 transition">
                             <div className="flex justify-between items-start">
                                 <div className="flex items-center">
                                     <AlertTriangle className="w-4 h-4 text-red-500 mr-2" />
                                     <span className="font-bold text-xs text-red-800 truncate max-w-[140px]">{inc.title}</span>
                                 </div>
-                                <span className="text-[10px] font-bold text-red-600 bg-white px-1.5 py-0.5 rounded border border-red-100">
-                                    {inc.status === 'NEW' ? 'Nouveau' : 'En cours'}
-                                </span>
+                                <span className="text-[10px] font-bold text-red-600 bg-white px-1.5 py-0.5 rounded border border-red-100">{inc.status === 'NEW' ? 'Nouveau' : 'En cours'}</span>
                             </div>
-                            <p className="text-[10px] text-red-700 mt-1 line-clamp-1">{inc.description}</p>
                         </div>
                     ))
                  ) : (
@@ -497,34 +484,25 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
            {/* AUTOMATION STATUS */}
            <div className="p-6 border-b border-gray-100">
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Statut Automatisations</h3>
-              
               <div className="space-y-3">
-                  {/* Key Code Status */}
                   <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-100">
                       <div className="flex items-center">
                           <Key className="w-4 h-4 text-gray-500 mr-2" />
                           <div>
                               <p className="text-xs font-bold text-gray-700">Code Boîte à Clé</p>
                               {selectedReservation?.keyCodeSent ? (
-                                  <span className="text-[10px] text-green-600 flex items-center"><Check className="w-3 h-3 mr-1"/> Envoyé via {selectedConversation.platform}</span>
+                                  <span className="text-[10px] text-green-600 flex items-center"><Check className="w-3 h-3 mr-1"/> Envoyé</span>
                               ) : (
-                                  <span className="text-[10px] text-amber-600">En attente / Échec</span>
+                                  <span className="text-[10px] text-amber-600">En attente</span>
                               )}
                           </div>
                       </div>
                       {!selectedReservation?.keyCodeSent && (
-                          <button 
-                            onClick={handleSendKeyCode}
-                            disabled={sendingCode}
-                            className="text-indigo-600 hover:bg-indigo-50 p-1.5 rounded transition"
-                            title="Forcer l'envoi du code sur la plateforme"
-                          >
+                          <button onClick={handleSendKeyCode} disabled={sendingCode} className="text-indigo-600 hover:bg-indigo-50 p-1.5 rounded transition">
                               <RefreshCw className={`w-4 h-4 ${sendingCode ? 'animate-spin' : ''}`} />
                           </button>
                       )}
                   </div>
-
-                  {/* Guest Portal Link */}
                   <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
                       <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center">
@@ -539,22 +517,18 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
                               </div>
                           </div>
                       </div>
-                      
-                      <button 
-                        onClick={handleSendWhatsappLink}
-                        disabled={sendingWhatsapp}
-                        className="w-full bg-[#25D366] hover:bg-[#128C7E] text-white py-1.5 rounded-md font-bold text-xs flex items-center justify-center transition shadow-sm mb-1"
-                      >
-                         {sendingWhatsapp ? (
-                             <RefreshCw className="w-3 h-3 animate-spin mr-1.5"/>
-                         ) : (
-                             <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 mr-1.5 fill-current" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
-                         )}
-                         Envoyer lien par WhatsApp
-                      </button>
-                      <button className="w-full bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 py-1.5 rounded-md font-medium text-xs flex items-center justify-center transition">
-                         <Link className="w-3.5 h-3.5 mr-1.5"/> Copier lien
-                      </button>
+                      <div className="flex gap-2">
+                          <button onClick={handleSendWhatsappLink} disabled={sendingWhatsapp} className="flex-1 bg-[#25D366] hover:bg-[#128C7E] text-white py-1.5 rounded-md font-bold text-xs flex items-center justify-center transition shadow-sm">
+                             {sendingWhatsapp ? <RefreshCw className="w-3 h-3 animate-spin mr-1.5"/> : "Envoyer WhatsApp"}
+                          </button>
+                          <button 
+                            onClick={handleCopyLink} 
+                            className="px-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-600 rounded-md flex items-center justify-center transition"
+                            title="Copier le lien d'accès"
+                          >
+                             <Copy className="w-4 h-4" />
+                          </button>
+                      </div>
                   </div>
               </div>
            </div>
@@ -563,21 +537,13 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
            <div className="p-6 border-b border-gray-100">
               <div className="flex justify-between items-center mb-4">
                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Détails de l'invité</h3>
-                 <button className="flex items-center text-xs text-indigo-600 hover:underline">
-                   <Edit2 className="w-3 h-3 mr-1" /> Éditer
-                 </button>
+                 <button className="flex items-center text-xs text-indigo-600 hover:underline"><Edit2 className="w-3 h-3 mr-1" /> Éditer</button>
               </div>
-
               <div className="space-y-4">
                  <div className="flex items-center gap-3">
                     <User className="w-4 h-4 text-gray-400" />
                     <div>
-                      <p 
-                        className="text-sm font-medium text-gray-900 cursor-pointer hover:text-indigo-600"
-                        onClick={handleGoToGuestProfile}
-                      >
-                          {selectedConversation.guestName}
-                      </p>
+                      <p className="text-sm font-medium text-gray-900 cursor-pointer hover:text-indigo-600" onClick={handleGoToGuestProfile}>{selectedConversation.guestName}</p>
                       <p className="text-xs text-gray-500">Principal</p>
                     </div>
                  </div>
@@ -590,16 +556,6 @@ export const InboxView: React.FC<InboxViewProps> = ({ conversations, onUpdateCon
                     <p className="text-sm text-gray-600">{selectedConversation.guestPhone || '+33 6 .. .. .. ..'}</p>
                  </div>
               </div>
-           </div>
-
-           {/* Notes */}
-           <div className="p-6 flex-1">
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Notes Privées</h3>
-              <textarea 
-                className="w-full h-32 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-gray-700 focus:outline-none resize-none"
-                placeholder="Ajoutez une note sur ce voyageur..."
-                defaultValue={selectedConversation.notes}
-              />
            </div>
         </div>
       )}

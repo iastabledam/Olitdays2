@@ -42,6 +42,7 @@ export const PropertiesView: React.FC<PropertiesViewProps> = ({
     setTimeout(() => {
       const mockImportedProperty: Property = {
         id: `p-new-${Date.now()}`,
+        tenantId: 't1', // Mock Tenant ID
         name: "Superbe Loft Vue Mer (Import Airbnb)",
         address: "Promenade des Anglais, Nice",
         ownerId: 'u3',
@@ -287,7 +288,7 @@ export const PropertiesView: React.FC<PropertiesViewProps> = ({
                        <input 
                          type="text" 
                          placeholder="https://www.airbnb.fr/rooms/12345678"
-                         className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#FF5A5F] outline-none"
+                         className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl bg-white text-gray-900 focus:ring-2 focus:ring-[#FF5A5F] outline-none"
                          value={importUrl}
                          onChange={(e) => setImportUrl(e.target.value)}
                          autoFocus

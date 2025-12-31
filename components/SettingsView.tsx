@@ -1,986 +1,1314 @@
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
+import { BrandSettings, GlobalPolicy, Property, CustomFee } from '../types';
+import { MOCK_GLOBAL_POLICIES, MOCK_PROPERTIES } from '../constants';
 import { 
-  Settings, Bell, CreditCard, Building, Link, 
-  CheckCircle, AlertCircle, RefreshCw, Key, Save, Server, Calendar,
-  Copy, Plus, Trash2, ExternalLink, Globe, ArrowRight, Loader, ChevronDown, ChevronUp, ChevronRight,
-  Info, Home, Check, X, Zap, ArrowLeft, Upload, Palette, Workflow
+  Settings, 
+  Palette, 
+  Link, 
+  Save, 
+  CheckCircle,
+  ExternalLink,
+  Zap,
+  ScrollText,
+  Plus,
+  Star,
+  MoreHorizontal,
+  X,
+  Trash2,
+  CalendarDays,
+  RefreshCw,
+  Copy,
+  Upload,
+  Download,
+  Mail,
+  MessageSquare,
+  Percent,
+  Coins,
+  Globe,
+  Info,
+  Pencil
 } from 'lucide-react';
-import { MOCK_PROPERTIES } from '../constants';
-import { BrandSettings } from '../types';
-
-// --- COLOR UTILITIES ---
-// Helper functions to handle HSV <-> HEX conversion for the advanced picker
-
-const hexToHsv = (hex: string) => {
-  let r = 0, g = 0, b = 0;
-  // Handle standard cases
-  if (hex.length === 4) {
-    r = parseInt("0x" + hex[1] + hex[1]);
-    g = parseInt("0x" + hex[2] + hex[2]);
-    b = parseInt("0x" + hex[3] + hex[3]);
-  } else if (hex.length === 7) {
-    r = parseInt("0x" + hex[1] + hex[2]);
-    g = parseInt("0x" + hex[3] + hex[4]);
-    b = parseInt("0x" + hex[5] + hex[6]);
-  }
-  
-  r /= 255; g /= 255; b /= 255;
-  const max = Math.max(r, g, b), min = Math.min(r, g, b);
-  let h = 0, s = 0, v = max;
-  const d = max - min;
-  s = max === 0 ? 0 : d / max;
-  if (max !== min) {
-    switch (max) {
-      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-      case g: h = (b - r) / d + 2; break;
-      case b: h = (r - g) / d + 4; break;
-    }
-    h /= 6;
-  }
-  return { h: h * 360, s: s * 100, v: v * 100 };
-};
-
-const hsvToHex = (h: number, s: number, v: number) => {
-  let r, g, b;
-  const i = Math.floor(h / 60);
-  const f = h / 60 - i;
-  const p = v * (1 - s);
-  const q = v * (1 - f * s);
-  const t = v * (1 - (1 - f) * s);
-  
-  const mod = i % 6;
-  if (mod === 0) { r = v; g = t; b = p; }
-  else if (mod === 1) { r = q; g = v; b = p; }
-  else if (mod === 2) { r = p; g = v; b = t; }
-  else if (mod === 3) { r = p; g = q; b = v; }
-  else if (mod === 4) { r = t; g = p; b = v; }
-  else { r = v; g = p; b = q; }
-
-  const toHex = (x: number) => {
-    const hex = Math.round(x * 255).toString(16);
-    return hex.length === 1 ? "0" + hex : hex;
-  };
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-};
-
-// --- COLOR PICKER COMPONENT ---
-const AdvancedColorPicker = ({ color, onChange }: { color: string, onChange: (c: string) => void }) => {
-  const [hsv, setHsv] = useState(hexToHsv(color));
-  const [isDraggingSquare, setIsDraggingSquare] = useState(false);
-  const [isDraggingHue, setIsDraggingHue] = useState(false);
-  const squareRef = useRef<HTMLDivElement>(null);
-  const hueRef = useRef<HTMLDivElement>(null);
-
-  // Update HSV when external color prop changes (e.g. manual text input)
-  useEffect(() => {
-    // Only update if the color is significantly different to avoid loop
-    const currentHex = hsvToHex(hsv.h, hsv.s / 100, hsv.v / 100);
-    if (color.toLowerCase() !== currentHex.toLowerCase()) {
-       setHsv(hexToHsv(color));
-    }
-  }, [color]);
-
-  // Handle Square Drag (Saturation / Value)
-  const handleSquareMove = useCallback((e: MouseEvent) => {
-    if (!squareRef.current) return;
-    const rect = squareRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
-    
-    const newS = x * 100;
-    const newV = 100 - (y * 100);
-    
-    setHsv(prev => {
-      const newHsv = { ...prev, s: newS, v: newV };
-      onChange(hsvToHex(newHsv.h, newHsv.s / 100, newHsv.v / 100));
-      return newHsv;
-    });
-  }, [onChange]);
-
-  // Handle Hue Drag
-  const handleHueMove = useCallback((e: MouseEvent) => {
-    if (!hueRef.current) return;
-    const rect = hueRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    
-    const newH = x * 360;
-    
-    setHsv(prev => {
-      const newHsv = { ...prev, h: newH };
-      onChange(hsvToHex(newHsv.h, newHsv.s / 100, newHsv.v / 100));
-      return newHsv;
-    });
-  }, [onChange]);
-
-  const handleMouseUp = useCallback(() => {
-    setIsDraggingSquare(false);
-    setIsDraggingHue(false);
-  }, []);
-
-  useEffect(() => {
-    if (isDraggingSquare) {
-      window.addEventListener('mousemove', handleSquareMove);
-      window.addEventListener('mouseup', handleMouseUp);
-    }
-    if (isDraggingHue) {
-      window.addEventListener('mousemove', handleHueMove);
-      window.addEventListener('mouseup', handleMouseUp);
-    }
-    return () => {
-      window.removeEventListener('mousemove', handleSquareMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('mousemove', handleHueMove);
-    };
-  }, [isDraggingSquare, isDraggingHue, handleSquareMove, handleHueMove, handleMouseUp]);
-
-  return (
-    <div className="w-full max-w-xs select-none">
-      {/* 1. Saturation/Value Square */}
-      <div 
-        ref={squareRef}
-        className="w-full h-40 rounded-lg relative cursor-crosshair shadow-inner border border-gray-200 mb-4 overflow-hidden"
-        style={{
-          backgroundColor: `hsl(${hsv.h}, 100%, 50%)`,
-          backgroundImage: `
-            linear-gradient(to top, #000, transparent), 
-            linear-gradient(to right, #fff, transparent)
-          `
-        }}
-        onMouseDown={(e) => { setIsDraggingSquare(true); handleSquareMove(e as any); }}
-      >
-        <div 
-          className="absolute w-4 h-4 rounded-full border-2 border-white shadow-md pointer-events-none -ml-2 -mt-2"
-          style={{ 
-            left: `${hsv.s}%`, 
-            top: `${100 - hsv.v}%`,
-            backgroundColor: color 
-          }}
-        />
-      </div>
-
-      {/* 2. Hue Slider */}
-      <div 
-        ref={hueRef}
-        className="w-full h-4 rounded-full relative cursor-pointer shadow-inner border border-gray-200 mb-4"
-        style={{
-          background: 'linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%)'
-        }}
-        onMouseDown={(e) => { setIsDraggingHue(true); handleHueMove(e as any); }}
-      >
-        <div 
-          className="absolute w-4 h-4 bg-white rounded-full shadow-md border border-gray-200 pointer-events-none -ml-2 top-0"
-          style={{ left: `${(hsv.h / 360) * 100}%` }}
-        />
-      </div>
-      
-      {/* 3. Inputs */}
-      <div className="flex gap-2">
-         <div className="flex-1">
-            <label className="text-[10px] text-gray-500 font-bold uppercase">Hex</label>
-            <div className="flex items-center border border-gray-300 rounded-lg px-2 bg-white shadow-sm">
-                <span className="text-gray-400 text-sm">#</span>
-                <input 
-                  type="text" 
-                  value={color.replace(/^#/, '')} 
-                  onChange={(e) => {
-                    // Sanitize input: remove non-hex chars and any leading/trailing #, max 6 chars
-                    const cleanValue = e.target.value.replace(/[^0-9A-Fa-f]/g, '').slice(0, 6);
-                    onChange(`#${cleanValue}`);
-                  }}
-                  className="w-full py-1.5 text-sm outline-none font-mono uppercase text-gray-900 bg-transparent"
-                  maxLength={7}
-                  placeholder="000000"
-                />
-            </div>
-         </div>
-         <div className="w-20">
-             <label className="text-[10px] text-gray-500 font-bold uppercase">Preview</label>
-             <div className="w-full h-[34px] rounded-lg border border-gray-200 shadow-sm" style={{ backgroundColor: color }}></div>
-         </div>
-      </div>
-    </div>
-  );
-};
-
 
 interface SettingsViewProps {
-  initialTab?: 'general' | 'connections' | 'billing' | 'notifications';
-  brandSettings?: BrandSettings;
-  onUpdateBrand?: (settings: BrandSettings) => void;
+  initialTab?: 'general' | 'connections' | 'policies' | 'calendars' | 'inbox' | 'taxes' | 'fees';
+  brandSettings: BrandSettings;
+  onUpdateBrand: (settings: BrandSettings) => void;
+  properties?: Property[];
+  onUpdateProperties?: (properties: Property[]) => void;
 }
 
-// Mock initial data for iCals per property
-const MOCK_ICALS: Record<string, {id: number, name: string, url: string, lastSync: string}[]> = {
-  'p1': [ // Villa Sunny Side
-    { id: 1, name: 'Airbnb (Villa Sunny)', url: 'https://airbnb.com/calendar/ical/villa_sunny.ics', lastSync: '10 min' }
-  ],
-  'p2': [ // Loft Lyon
-    { id: 3, name: 'Booking.com (Loft)', url: 'https://booking.com/calendar/ical/loft_lyon.ics', lastSync: '5 min' }
-  ],
-  'p3': [] // Chalet (Empty)
-};
+const FEE_TYPES_LIST = [
+  "Air conditionné", "Association de l'hébergement", "Assurance voyage",
+  "Blanchisserie", "Bois", "Caution", "Chaise haute",
+  "Chauffage", "Chauffage de piscine", "Concierge", "Eau", "Électricité", "Équipement",
+  "Frais de ménage", "Frais de gestion", "Frais de service", "Frais divers", 
+  "Frais pour animaux de compagnie", "Gaz", "Internet", "Jacuzzi", "Jardinage", 
+  "Linge", "Linge (bain)", "Linge (lit)", "Lit bébé", "Lit supplémentaire",
+  "Parking", "Piscine", "Produits de toilette", "Spa", "Taxe de séjour", "Téléphone", 
+  "Transport"
+];
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ 
-    initialTab = 'connections',
-    brandSettings = { agencyName: 'HostFlow Pro', primaryColor: '#4f46e5', logoUrl: '' },
-    onUpdateBrand
+  initialTab = 'general', 
+  brandSettings, 
+  onUpdateBrand,
+  properties = [],
+  onUpdateProperties
 }) => {
-  const [activeTab, setActiveTab] = useState<'general' | 'connections' | 'billing' | 'notifications'>(initialTab);
-  const logoInputRef = useRef<HTMLInputElement>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [activeTab, setActiveTab] = useState<'general' | 'connections' | 'policies' | 'calendars' | 'inbox' | 'taxes' | 'fees'>(initialTab);
+  const [localBrand, setLocalBrand] = useState<BrandSettings>(brandSettings);
+  const [saved, setSaved] = useState(false);
   
-  // --- STATE: API CONNECTIONS (GLOBAL) ---
-  const [apiConnections, setApiConnections] = useState({
-    airbnb: { connected: false, listings: 0, isLoading: false },
-    booking: { connected: false, listings: 0, isLoading: false }
+  // Policies State - Init with sort
+  const [policies, setPolicies] = useState<GlobalPolicy[]>(() => {
+      // Sort initially so the main policy is first if possible
+      const initial = [...MOCK_GLOBAL_POLICIES];
+      const mainId = initial.length > 0 ? initial[0].id : 'pol-1';
+      return initial.sort((a, b) => (a.id === mainId ? -1 : 1));
   });
+  const [isPolicySidebarOpen, setIsPolicySidebarOpen] = useState(false);
+  const [editingPolicy, setEditingPolicy] = useState<GlobalPolicy | null>(null);
+  const [activePolicyDropdown, setActivePolicyDropdown] = useState<string | null>(null);
+  const [mainPolicyId, setMainPolicyId] = useState<string>(MOCK_GLOBAL_POLICIES[0]?.id || 'pol-1');
 
-  // --- STATE: WEBHOOKS (N8N/MAKE) ---
-  const [webhookUrls, setWebhookUrls] = useState({
-      onboarding: 'https://n8n.hostflow.app/webhook/onboarding-start',
-      contractSigned: 'https://n8n.hostflow.app/webhook/contract-signed'
-  });
+  // Fees State
+  const [isFeeSidebarOpen, setIsFeeSidebarOpen] = useState(false);
+  const [editingFee, setEditingFee] = useState<CustomFee | null>(null);
+  const [selectedFeeProperties, setSelectedFeeProperties] = useState<string[]>([]);
+  const [globalFees, setGlobalFees] = useState<CustomFee[]>([]);
 
-  // --- STATE: BOOKING WIZARD ---
-  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
-  const [bookingStep, setBookingStep] = useState(1); // 1=Auth, 2=Mapping, 3=Success
-  const [bookingIdInput, setBookingIdInput] = useState('');
-  const [isVerifyingId, setIsVerifyingId] = useState(false);
-  
-  // Mock Data for Mapping Step
-  const [foundBookingListings, setFoundBookingListings] = useState([
-    { id: 'b1', name: 'Luxury Loft Lyon Center', address: '45 Rue de la République', status: 'unmapped' },
-    { id: 'b2', name: 'Sunny Villa Nice', address: '12 Chemin des Oliviers', status: 'unmapped' },
-    { id: 'b3', name: 'New Apartment Paris', address: '10 Rue de Rivoli', status: 'unmapped' }
-  ]);
-  
-  // Mapping selections: Key = Booking ID, Value = HostFlow Property ID or 'NEW'
-  const [mappingSelections, setMappingSelections] = useState<Record<string, string>>({});
-
-  // --- STATE: ICAL (PER PROPERTY) ---
-  const [expandedPropertyId, setExpandedPropertyId] = useState<string | null>(null);
-  const [calendarsByProperty, setCalendarsByProperty] = useState(MOCK_ICALS);
-  
-  const [newIcalUrl, setNewIcalUrl] = useState('');
-  const [newIcalName, setNewIcalName] = useState('');
-  const [isSyncing, setIsSyncing] = useState<string | null>(null);
-
-  // --- ACTIONS ---
-
-  const handleConnectApi = (platform: 'airbnb' | 'booking') => {
-    if (platform === 'booking') {
-      // Open the Wizard for Booking.com
-      setBookingStep(1);
-      setBookingIdInput('');
-      setIsBookingModalOpen(true);
-    } else {
-      // Simulate simple OAuth for Airbnb
-      setApiConnections(prev => ({ ...prev, [platform]: { ...prev[platform], isLoading: true } }));
-      setTimeout(() => {
-        const confirmConnect = window.confirm(`Simulation OAuth : Autoriser HostFlow à gérer vos annonces Airbnb ?`);
-        if (confirmConnect) {
-          setApiConnections(prev => ({ ...prev, [platform]: { connected: true, listings: 12, isLoading: false } }));
-        } else {
-          setApiConnections(prev => ({ ...prev, [platform]: { ...prev[platform], isLoading: false } }));
-        }
-      }, 1500);
-    }
-  };
-
-  const handleDisconnectApi = (platform: 'airbnb' | 'booking') => {
-    if(window.confirm("Êtes-vous sûr de vouloir déconnecter ce canal ? Les mises à jour en temps réel cesseront.")){
-       setApiConnections(prev => ({ ...prev, [platform]: { connected: false, listings: 0, isLoading: false } }));
-    }
-  };
-
-  // Booking Wizard Logic
-  const handleBookingVerify = () => {
-    if (!bookingIdInput) return;
-    setIsVerifyingId(true);
-    // Simulate fetching listings from Booking.com XML API
-    setTimeout(() => {
-      setIsVerifyingId(false);
-      setBookingStep(2); // Go to Mapping
-      
-      // Pre-select mappings if names match (smart matching)
-      const initialMap: Record<string, string> = {};
-      foundBookingListings.forEach(bl => {
-         const match = MOCK_PROPERTIES.find(p => p.name.includes(bl.name) || p.address.includes(bl.address.split(' ')[0]));
-         if (match) initialMap[bl.id] = match.id;
-         else initialMap[bl.id] = 'import_new'; // Default to import if no match
+  useEffect(() => {
+      const allFees: CustomFee[] = [];
+      const seenIds = new Set();
+      properties.forEach(p => {
+          (p.pricing?.fees || []).forEach(f => {
+              if (!seenIds.has(f.id)) {
+                  seenIds.add(f.id);
+                  allFees.push(f);
+              }
+          });
       });
-      setMappingSelections(initialMap);
-    }, 1500);
+      setGlobalFees(allFees);
+  }, [properties]);
+
+  // Calendar State
+  // Synchronize local state with props to ensure new properties appear immediately
+  const [propertiesWithCalendars, setPropertiesWithCalendars] = useState<Property[]>(properties);
+  const [selectedImportPropertyId, setSelectedImportPropertyId] = useState<string>('');
+  const [importUrl, setImportUrl] = useState('');
+  const [importName, setImportName] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Sync effect: When 'properties' prop changes (new property added), update local state
+  useEffect(() => {
+      setPropertiesWithCalendars(properties);
+      // If no property is selected yet and we have properties, select the first one
+      if (!selectedImportPropertyId && properties.length > 0) {
+          setSelectedImportPropertyId(properties[0].id);
+      }
+  }, [properties]);
+
+  // Inbox Settings State
+  const [emailSignature, setEmailSignature] = useState(`Cordialement,\nL'équipe ${brandSettings.agencyName}`);
+  const inboxEmailAlias = "5a01e40c-fead-47c1-87e7@inbox.olitdays.com";
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+
+  const handleSave = () => {
+    onUpdateBrand(localBrand);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   };
 
-  const handleBookingFinish = () => {
-    setIsBookingModalOpen(false);
-    
-    // Calculate how many are connected
-    const mappedCount = Object.keys(mappingSelections).length;
-    
-    setApiConnections(prev => ({ ...prev, booking: { connected: true, listings: mappedCount, isLoading: false } }));
-    alert(`${mappedCount} annonces connectées ! Les nouveaux logements importés apparaitront dans l'onglet "Logements".`);
+  // --- POLICY HANDLERS ---
+  const handleOpenPolicySidebar = (policy?: GlobalPolicy) => {
+      if (policy) {
+          setEditingPolicy({ ...policy });
+      } else {
+          setEditingPolicy({
+              id: `pol-${Date.now()}`,
+              name: '',
+              paymentSchedule: '1_payment',
+              payment1Percentage: 100,
+              payment1Timing: 'at_booking',
+              cancellationPolicy: 'non_refundable',
+              securityDepositType: 'none',
+              quoteExpirationHours: 48
+          });
+      }
+      setIsPolicySidebarOpen(true);
   };
 
-  // iCal Logic
-  const handleAddIcal = (propertyId: string) => {
-    if (newIcalUrl && newIcalName) {
-      const newCal = { id: Date.now(), name: newIcalName, url: newIcalUrl, lastSync: 'À l\'instant' };
-      setCalendarsByProperty(prev => ({
-        ...prev,
-        [propertyId]: [...(prev[propertyId] || []), newCal]
-      }));
-      setNewIcalName('');
-      setNewIcalUrl('');
-    }
+  const handleSavePolicy = () => {
+      if (!editingPolicy || !editingPolicy.name) {
+          alert("Le nom de la politique est obligatoire");
+          return;
+      }
+      
+      setPolicies(prev => {
+          const index = prev.findIndex(p => p.id === editingPolicy.id);
+          if (index >= 0) {
+              const newPolicies = [...prev];
+              newPolicies[index] = editingPolicy;
+              return newPolicies;
+          } else {
+              return [...prev, editingPolicy];
+          }
+      });
+      setIsPolicySidebarOpen(false);
+      setEditingPolicy(null);
   };
 
-  const handleRemoveIcal = (propertyId: string, calId: number) => {
-    setCalendarsByProperty(prev => ({
-      ...prev,
-      [propertyId]: prev[propertyId].filter(c => c.id !== calId)
-    }));
+  const handleDeletePolicy = (id: string) => {
+      if(window.confirm("Êtes-vous sûr de vouloir supprimer cette politique ? Cette action est irréversible.")) {
+          setPolicies(prev => prev.filter(p => p.id !== id));
+          if (mainPolicyId === id) {
+              const remaining = policies.filter(p => p.id !== id);
+              if (remaining.length > 0) setMainPolicyId(remaining[0].id);
+          }
+      }
   };
 
-  const handleSyncNow = (propertyId: string) => {
-    setIsSyncing(propertyId);
-    setTimeout(() => {
-      setIsSyncing(null);
-      alert('Calendriers synchronisés avec succès !');
-    }, 2000);
+  const handleSetMainPolicy = (id: string) => {
+      setMainPolicyId(id);
+      setActivePolicyDropdown(null);
+      
+      // Reorder policies: Move the main policy to the top of the list
+      setPolicies(prev => {
+          const target = prev.find(p => p.id === id);
+          if (!target) return prev;
+          
+          const others = prev.filter(p => p.id !== id);
+          return [target, ...others];
+      });
   };
 
-  const getHostFlowIcalLink = (propertyId: string) => `https://api.hostflow.app/ical/export/${propertyId}/calendar.ics`;
+  // --- FEE HANDLERS ---
+  const handleOpenFeeSidebar = (fee?: CustomFee) => {
+      if (fee) {
+          setEditingFee({ ...fee });
+          const propsWithThisFee = properties.filter(p => p.pricing?.fees?.some(f => f.id === fee.id)).map(p => p.id);
+          setSelectedFeeProperties(propsWithThisFee);
+      } else {
+          setEditingFee({
+              id: `fee-glob-${Date.now()}`,
+              name: '',
+              type: 'Frais de ménage',
+              amount: 0,
+              calculationType: 'flat',
+              frequency: 'per_stay',
+              taxable: false,
+              shortStayOnly: false
+          });
+          setSelectedFeeProperties([]);
+      }
+      setIsFeeSidebarOpen(true);
+  };
+
+  const handleSaveFee = () => {
+      if (!editingFee || !editingFee.name || !onUpdateProperties) {
+          alert("Le nom du frais est obligatoire");
+          return;
+      }
+
+      const updatedProperties = properties.map(p => {
+          const shouldHaveFee = selectedFeeProperties.includes(p.id);
+          const currentFees = p.pricing?.fees || [];
+          const feeIndex = currentFees.findIndex(f => f.id === editingFee.id);
+          
+          let newFees = [...currentFees];
+
+          if (shouldHaveFee) {
+              if (feeIndex >= 0) {
+                  newFees[feeIndex] = editingFee;
+              } else {
+                  newFees.push(editingFee);
+              }
+          } else {
+              if (feeIndex >= 0) {
+                  newFees = newFees.filter(f => f.id !== editingFee.id);
+              }
+          }
+
+          return {
+              ...p,
+              pricing: {
+                  ...p.pricing!,
+                  fees: newFees
+              }
+          };
+      });
+
+      onUpdateProperties(updatedProperties);
+      setIsFeeSidebarOpen(false);
+      setEditingFee(null);
+  };
+
+  // --- CALENDAR ACTIONS ---
+  const handleAddCalendar = () => {
+      if (!importUrl || !importName || !selectedImportPropertyId) return;
+      
+      const updatedProperties = propertiesWithCalendars.map(p => {
+          if (p.id === selectedImportPropertyId) {
+              const newCalendar = {
+                  id: `cal-${Date.now()}`,
+                  name: importName,
+                  url: importUrl,
+                  lastSynced: 'À l\'instant'
+              };
+              return {
+                  ...p,
+                  importedCalendars: [...(p.importedCalendars || []), newCalendar]
+              };
+          }
+          return p;
+      });
+
+      setPropertiesWithCalendars(updatedProperties);
+      if (onUpdateProperties) onUpdateProperties(updatedProperties); // Sync to global state
+      setImportUrl('');
+      setImportName('');
+  };
+
+  const handleDeleteCalendar = (propertyId: string, calendarId: string) => {
+      if(!window.confirm("Arrêter la synchronisation de ce calendrier ?")) return;
+      
+      const updatedProperties = propertiesWithCalendars.map(p => {
+          if (p.id === propertyId) {
+              return {
+                  ...p,
+                  importedCalendars: p.importedCalendars?.filter(c => c.id !== calendarId) || []
+              };
+          }
+          return p;
+      });
+
+      setPropertiesWithCalendars(updatedProperties);
+      if (onUpdateProperties) onUpdateProperties(updatedProperties);
+  };
+
+  const handleSyncNow = (propertyId: string, calendarId: string) => {
+      setIsSyncing(true);
+      setTimeout(() => {
+          setIsSyncing(false);
+          const updatedProperties = propertiesWithCalendars.map(p => {
+            if (p.id === propertyId) {
+                return {
+                    ...p,
+                    importedCalendars: p.importedCalendars?.map(c => c.id === calendarId ? {...c, lastSynced: 'À l\'instant'} : c)
+                };
+            }
+            return p;
+          });
+          setPropertiesWithCalendars(updatedProperties);
+          if (onUpdateProperties) onUpdateProperties(updatedProperties);
+      }, 1500);
+  };
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      alert('Lien copié dans le presse-papier !');
-    }).catch(err => {
-      console.error('Failed to copy: ', err);
-    });
+      navigator.clipboard.writeText(text);
+      alert("Copié !");
   };
 
-  // --- GENERAL TAB ACTIONS ---
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0] && onUpdateBrand) {
-        const file = e.target.files[0];
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            if (event.target?.result) {
-                onUpdateBrand({ ...brandSettings, logoUrl: event.target.result as string });
-            }
-        };
-        reader.readAsDataURL(file);
+  const selectedImportProperty = propertiesWithCalendars.find(p => p.id === selectedImportPropertyId);
+
+  const connections = [
+    {
+      id: 'airbnb',
+      name: 'Airbnb',
+      description: 'Synchronisez vos réservations et calendriers',
+      icon: '🏠',
+      color: '#FF5A5F',
+      connected: false
+    },
+    {
+      id: 'booking',
+      name: 'Booking.com',
+      description: 'Importez automatiquement vos réservations',
+      icon: '🅱️',
+      color: '#003580',
+      connected: false
+    },
+    {
+      id: 'stripe',
+      name: 'Stripe',
+      description: 'Gérez les paiements et les cautions',
+      icon: '💳',
+      color: '#635BFF',
+      connected: true
     }
-  };
-
-  const handleColorChange = (color: string) => {
-      if(onUpdateBrand) {
-          onUpdateBrand({ ...brandSettings, primaryColor: color });
-      }
-  };
-
-  const handleNameChange = (name: string) => {
-      if(onUpdateBrand) {
-          onUpdateBrand({ ...brandSettings, agencyName: name });
-      }
-  };
-
-  const handleSaveSettings = () => {
-      setIsSaving(true);
-      // Simulate API saving
-      setTimeout(() => {
-          setIsSaving(false);
-          setSaveSuccess(true);
-          // Revert back to normal state after 3 seconds
-          setTimeout(() => setSaveSuccess(false), 3000);
-      }, 800);
-  };
+  ];
 
   return (
-    <div className="w-full space-y-6 relative">
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">Paramètres</h1>
+    <div className="w-full space-y-6 animate-fade-in relative pb-32">
       
-      <div className="flex flex-col md:flex-row gap-6">
-        {/* Sidebar Nav */}
-        <div className="w-full md:w-64 space-y-1 flex-shrink-0">
-           <button 
-             onClick={() => setActiveTab('general')}
-             className={`w-full flex items-center px-4 py-2 rounded-lg font-medium transition ${activeTab === 'general' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-50'}`}
-           >
-             <Building className="w-4 h-4 mr-3" /> Agence
-           </button>
-           <button 
-             onClick={() => setActiveTab('connections')}
-             className={`w-full flex items-center px-4 py-2 rounded-lg font-medium transition ${activeTab === 'connections' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-50'}`}
-           >
-             <Link className="w-4 h-4 mr-3" /> Connexions
-           </button>
-           <button 
-             onClick={() => setActiveTab('notifications')}
-             className={`w-full flex items-center px-4 py-2 rounded-lg font-medium transition ${activeTab === 'notifications' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-50'}`}
-           >
-             <Bell className="w-4 h-4 mr-3" /> Notifications
-           </button>
+      {/* Header */}
+      <div className="flex justify-between items-center px-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800 flex items-center">
+            <Settings className="w-6 h-6 mr-2 text-indigo-600" />
+            Paramètres
+          </h1>
+          <p className="text-gray-500">Configurez votre espace de gestion</p>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mx-4">
+        <div className="flex border-b border-gray-200 overflow-x-auto">
+          <button
+            onClick={() => setActiveTab('general')}
+            className={`flex-1 px-6 py-4 text-sm font-medium transition-colors whitespace-nowrap ${
+              activeTab === 'general'
+                ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <Palette className="w-4 h-4 inline mr-2" />
+            Général
+          </button>
+          <button
+            onClick={() => setActiveTab('policies')}
+            className={`flex-1 px-6 py-4 text-sm font-medium transition-colors whitespace-nowrap ${
+              activeTab === 'policies'
+                ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <ScrollText className="w-4 h-4 inline mr-2" />
+            Politiques
+          </button>
+          <button
+            onClick={() => setActiveTab('fees')}
+            className={`flex-1 px-6 py-4 text-sm font-medium transition-colors whitespace-nowrap ${
+              activeTab === 'fees'
+                ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <Coins className="w-4 h-4 inline mr-2" />
+            Frais
+          </button>
+          <button
+            onClick={() => setActiveTab('taxes')}
+            className={`flex-1 px-6 py-4 text-sm font-medium transition-colors whitespace-nowrap ${
+              activeTab === 'taxes'
+                ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <Percent className="w-4 h-4 inline mr-2" />
+            Taxes
+          </button>
+          <button
+            onClick={() => setActiveTab('inbox')}
+            className={`flex-1 px-6 py-4 text-sm font-medium transition-colors whitespace-nowrap ${
+              activeTab === 'inbox'
+                ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <Mail className="w-4 h-4 inline mr-2" />
+            Boîte de réception
+          </button>
+          <button
+            onClick={() => setActiveTab('calendars')}
+            className={`flex-1 px-6 py-4 text-sm font-medium transition-colors whitespace-nowrap ${
+              activeTab === 'calendars'
+                ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <CalendarDays className="w-4 h-4 inline mr-2" />
+            Calendriers (iCal)
+          </button>
+          <button
+            onClick={() => setActiveTab('connections')}
+            className={`flex-1 px-6 py-4 text-sm font-medium transition-colors whitespace-nowrap ${
+              activeTab === 'connections'
+                ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <Link className="w-4 h-4 inline mr-2" />
+            Canaux API
+          </button>
         </div>
 
-        {/* Content Area */}
-        <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 p-6 min-h-[500px]">
-           
-           {/* --- TAB: GENERAL --- */}
-           {activeTab === 'general' && (
-             <div className="animate-fade-in max-w-2xl space-y-8">
-               <div>
-                   <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
-                       <Building className="w-5 h-5 mr-2 text-indigo-600" />
-                       Identité de l'Agence
-                   </h2>
-                   <p className="text-sm text-gray-500 mb-6">Personnalisez l'apparence de votre interface d'administration et du portail voyageur.</p>
-                   
-                   <div className="space-y-6">
-                       
-                       {/* Agency Name */}
-                       <div>
-                           <label className="block text-sm font-medium text-gray-700 mb-1">Nom de l'agence</label>
-                           <input 
-                               type="text" 
-                               value={brandSettings.agencyName}
-                               onChange={(e) => handleNameChange(e.target.value)}
-                               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-gray-900"
-                           />
-                       </div>
+        <div className="p-6 min-h-[400px]">
+          {/* Tab: General */}
+          {activeTab === 'general' && (
+            <div className="space-y-6 max-w-4xl mx-auto">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nom de l'agence
+                </label>
+                <input
+                  type="text"
+                  value={localBrand.agencyName}
+                  onChange={(e) => setLocalBrand({ ...localBrand, agencyName: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                  placeholder="Mon Agence"
+                />
+              </div>
 
-                       {/* Logo Upload */}
-                       <div>
-                           <label className="block text-sm font-medium text-gray-700 mb-2">Logo</label>
-                           <div className="flex items-center gap-4">
-                               <div className="w-20 h-20 rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden">
-                                   {brandSettings.logoUrl ? (
-                                       <img src={brandSettings.logoUrl} alt="Logo" className="w-full h-full object-contain p-1" />
-                                   ) : (
-                                       <Building className="w-8 h-8 text-gray-300" />
-                                   )}
-                               </div>
-                               <div>
-                                   <input 
-                                     type="file" 
-                                     ref={logoInputRef} 
-                                     onChange={handleLogoUpload} 
-                                     className="hidden" 
-                                     accept="image/png, image/jpeg, image/svg+xml"
-                                   />
-                                   <button 
-                                     onClick={() => logoInputRef.current?.click()}
-                                     className="text-sm bg-white border border-gray-300 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-50 text-gray-700 mb-1 block"
-                                   >
-                                       Télécharger un logo
-                                   </button>
-                                   <p className="text-xs text-gray-400">Recommandé : 200x200px, PNG transparent.</p>
-                               </div>
-                           </div>
-                       </div>
-
-                       {/* Primary Color Picker (New Advanced Implementation) */}
-                       <div>
-                           <label className="block text-sm font-medium text-gray-700 mb-2">Couleur principale</label>
-                           <div className="flex flex-col md:flex-row gap-8 items-start">
-                               <AdvancedColorPicker 
-                                  color={brandSettings.primaryColor} 
-                                  onChange={handleColorChange} 
-                               />
-                               
-                               <div className="flex-1 bg-gray-50 p-4 rounded-xl border border-gray-200 w-full">
-                                  <p className="text-xs font-bold text-gray-400 uppercase mb-3">Aperçu du rendu</p>
-                                  <div className="space-y-3">
-                                     <button 
-                                       className="px-4 py-2 rounded-lg text-white text-sm font-medium shadow-sm"
-                                       style={{ backgroundColor: brandSettings.primaryColor }}
-                                     >
-                                       Bouton Principal
-                                     </button>
-                                     <div className="flex items-center">
-                                       <CheckCircle className="w-5 h-5 mr-2" style={{ color: brandSettings.primaryColor }} />
-                                       <span className="text-sm font-medium" style={{ color: brandSettings.primaryColor }}>
-                                         Texte ou icône colorée
-                                       </span>
-                                     </div>
-                                     <div className="w-full bg-white rounded-lg border border-gray-200 p-2 text-sm">
-                                        Survol souris <span style={{ color: brandSettings.primaryColor, fontWeight: 'bold' }}>Lien Actif</span>
-                                     </div>
-                                  </div>
-                               </div>
-                           </div>
-                           <p className="text-xs text-gray-500 mt-4">
-                             Utilisez le sélecteur pour ajuster précisément la teinte, la saturation et la luminosité.
-                           </p>
-                       </div>
-
-                   </div>
-
-                   {/* Save Button Area */}
-                   <div className="pt-6 mt-6 border-t border-gray-100 flex justify-end">
-                       <button 
-                           onClick={handleSaveSettings}
-                           disabled={isSaving || saveSuccess}
-                           className={`flex items-center px-6 py-2.5 rounded-lg font-bold transition shadow-sm ${
-                               saveSuccess 
-                               ? 'bg-green-600 text-white' 
-                               : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                           }`}
-                       >
-                           {isSaving ? (
-                               <>
-                                   <Loader className="w-4 h-4 mr-2 animate-spin" />
-                                   Enregistrement...
-                               </>
-                           ) : saveSuccess ? (
-                               <>
-                                   <Check className="w-4 h-4 mr-2" />
-                                   Enregistré !
-                               </>
-                           ) : (
-                               <>
-                                   <Save className="w-4 h-4 mr-2" />
-                                   Enregistrer les modifications
-                               </>
-                           )}
-                       </button>
-                   </div>
-               </div>
-             </div>
-           )}
-
-           {/* --- TAB: CONNECTIONS --- */}
-           {activeTab === 'connections' && (
-             <div className="animate-fade-in space-y-10">
-               
-               {/* --- SECTION 1: API DIRECTE (GLOBAL) --- */}
-               <div>
-                 <div className="mb-4">
-                    <h2 className="text-lg font-bold text-gray-800 flex items-center">
-                      <Zap className="w-5 h-5 mr-2 text-indigo-600" />
-                      1. Channel Manager (API Temps Réel)
-                    </h2>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Synchronisation complète (Prix, Dispo, Messages, Réservations). Requis pour une gestion professionnelle.
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Couleur principale
+                </label>
+                <div className="flex items-center gap-4">
+                  <div 
+                    className="w-16 h-16 rounded-xl border-2 border-gray-200 shadow-inner cursor-pointer overflow-hidden"
+                    style={{ backgroundColor: localBrand.primaryColor }}
+                  >
+                    <input
+                      type="color"
+                      value={localBrand.primaryColor}
+                      onChange={(e) => setLocalBrand({ ...localBrand, primaryColor: e.target.value })}
+                      className="w-full h-full opacity-0 cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={localBrand.primaryColor}
+                      onChange={(e) => setLocalBrand({ ...localBrand, primaryColor: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg font-mono text-sm bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                      placeholder="#4f46e5"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      Cette couleur sera utilisée dans toute l'interface
                     </p>
-                 </div>
+                  </div>
+                </div>
+              </div>
 
-                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {/* AIRBNB CARD */}
-                    <div className={`border rounded-xl p-4 transition-all ${apiConnections.airbnb.connected ? 'border-green-200 bg-green-50/30' : 'border-gray-200'}`}>
-                       <div className="flex justify-between items-center mb-2">
-                          <div className="flex items-center">
-                             <img src="https://upload.wikimedia.org/wikipedia/commons/6/69/Airbnb_Logo_B%C3%A9lo.svg" className="h-6 w-6 mr-3" alt="Airbnb" />
-                             <span className="font-bold text-gray-800 text-sm">Airbnb</span>
-                          </div>
-                          {apiConnections.airbnb.isLoading ? (
-                            <Loader className="w-4 h-4 text-indigo-600 animate-spin" />
-                          ) : apiConnections.airbnb.connected ? (
-                             <button onClick={() => handleDisconnectApi('airbnb')} className="text-xs text-red-500 hover:underline">Déconnecter</button>
-                          ) : (
-                             <button onClick={() => handleConnectApi('airbnb')} className="text-xs font-bold text-white bg-[#FF5A5F] px-3 py-1.5 rounded-lg hover:bg-[#ff4449]">Connecter</button>
-                          )}
-                       </div>
-                       {apiConnections.airbnb.connected && <p className="text-xs text-green-700 flex items-center"><CheckCircle className="w-3 h-3 mr-1"/> 12 annonces synchro</p>}
+              <div className="flex justify-end pt-4 border-t border-gray-100">
+                <button
+                  onClick={handleSave}
+                  disabled={saved}
+                  className={`flex items-center px-6 py-3 rounded-lg font-medium text-sm transition ${
+                    saved
+                      ? 'bg-green-500 text-white'
+                      : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                  }`}
+                >
+                  {saved ? (
+                    <>
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Sauvegardé !
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Enregistrer
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Tab: Fees */}
+          {activeTab === 'fees' && (
+            <div className="space-y-6">
+                <div className="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 className="text-xl font-bold text-gray-800">Frais</h2>
+                        <p className="text-sm text-gray-500">Créez et gérez vos frais et attribuez-les à vos hébergements.</p>
                     </div>
+                    <button 
+                        onClick={() => handleOpenFeeSidebar()}
+                        className="bg-emerald-500 text-white px-4 py-2 rounded-lg font-medium text-sm hover:bg-emerald-600 transition flex items-center shadow-sm"
+                    >
+                        <Plus className="w-4 h-4 mr-2" /> Créer un frais
+                    </button>
+                </div>
 
-                    {/* BOOKING CARD */}
-                    <div className={`border rounded-xl p-4 transition-all ${apiConnections.booking.connected ? 'border-green-200 bg-green-50/30' : 'border-gray-200'}`}>
-                       <div className="flex justify-between items-center mb-2">
-                          <div className="flex items-center">
-                             <img src="https://upload.wikimedia.org/wikipedia/commons/b/be/Booking.com_logo.svg" className="h-6 w-6 mr-3 object-contain" alt="Booking" />
-                             <span className="font-bold text-[#003580] text-sm">Booking.com</span>
-                          </div>
-                          {apiConnections.booking.isLoading ? (
-                            <Loader className="w-4 h-4 text-indigo-600 animate-spin" />
-                          ) : apiConnections.booking.connected ? (
-                             <button onClick={() => handleDisconnectApi('booking')} className="text-xs text-red-500 hover:underline">Déconnecter</button>
-                          ) : (
-                             <button onClick={() => handleConnectApi('booking')} className="text-xs font-bold text-white bg-[#003580] px-3 py-1.5 rounded-lg hover:bg-[#002860]">Connecter</button>
-                          )}
-                       </div>
-                       {apiConnections.booking.connected ? (
-                          <p className="text-xs text-green-700 flex items-center"><CheckCircle className="w-3 h-3 mr-1"/> {apiConnections.booking.listings} établissements synchro</p>
-                       ) : (
-                          <div className="mt-2 flex items-center text-[10px] text-amber-600 bg-amber-50 p-1.5 rounded">
-                            <Info className="w-3 h-3 mr-1" />
-                            Requiert validation Extranet
-                          </div>
-                       )}
-                    </div>
-                 </div>
-               </div>
-
-               <div className="border-t border-gray-100"></div>
-
-                {/* --- SECTION: WEBHOOKS (N8N/MAKE) --- */}
-                <div>
-                    <div className="mb-4">
-                        <h2 className="text-lg font-bold text-gray-800 flex items-center">
-                            <Workflow className="w-5 h-5 mr-2 text-pink-600" />
-                            Automatisations (n8n / Make)
-                        </h2>
-                        <p className="text-sm text-gray-500 mt-1">
-                            Connectez vos workflows d'automatisation (Onboarding, Signature, Emails).
-                        </p>
-                    </div>
-                    
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-4">
-                        <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Déclencheur Onboarding</label>
-                            <p className="text-xs text-gray-500 mb-2">URL appelée lors de la génération du contrat (Webhook POST).</p>
-                            <input 
-                                type="text" 
-                                value={webhookUrls.onboarding}
-                                onChange={(e) => setWebhookUrls({...webhookUrls, onboarding: e.target.value})}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono text-gray-600 bg-white focus:ring-2 focus:ring-pink-500 outline-none"
-                            />
+                {globalFees.length === 0 ? (
+                    <div className="text-center py-16 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl">
+                        <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4 text-emerald-600">
+                            <Coins className="w-8 h-8" />
                         </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">Callback Signature</label>
-                            <p className="text-xs text-gray-500 mb-2">URL à fournir à DocuSign/YouSign pour la confirmation de signature.</p>
+                        <h3 className="text-lg font-bold text-gray-800 mb-2">Créez des frais</h3>
+                        <p className="text-gray-500 text-sm max-w-md mx-auto mb-6">
+                            Définissez des frais de ménage, de service ou autres, et appliquez-les facilement à plusieurs logements en une seule fois.
+                        </p>
+                        <button 
+                            onClick={() => handleOpenFeeSidebar()}
+                            className="bg-emerald-500 text-white px-6 py-2 rounded-lg font-medium hover:bg-emerald-600 transition"
+                        >
+                            Créer un frais
+                        </button>
+                    </div>
+                ) : (
+                    <div className="rounded-xl border border-gray-200 bg-gray-50">
+                        <table className="w-full text-left">
+                            <thead>
+                                <tr className="bg-gray-100 border-b border-gray-200 text-xs text-gray-500 uppercase font-semibold">
+                                    <th className="px-6 py-3">Nom</th>
+                                    <th className="px-6 py-3">Type</th>
+                                    <th className="px-6 py-3">Montant</th>
+                                    <th className="px-6 py-3">Fréquence</th>
+                                    <th className="px-6 py-3 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 bg-white">
+                                {globalFees.map(fee => (
+                                    <tr key={fee.id} className="hover:bg-gray-50 transition group">
+                                        <td className="px-6 py-4 font-bold text-gray-900">{fee.name}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-600">{fee.type}</td>
+                                        <td className="px-6 py-4 text-sm font-mono font-medium text-gray-800">
+                                            {fee.calculationType === 'flat' ? `€${fee.amount}` : `${fee.amount}%`}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-600">
+                                            {fee.frequency === 'per_stay' ? 'Par séjour' : 
+                                             fee.frequency === 'per_night' ? 'Par nuit' : 
+                                             fee.frequency === 'per_person' ? 'Par personne' : 'Par nuit/pers'}
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <button onClick={() => handleOpenFeeSidebar(fee)} className="text-gray-400 hover:text-indigo-600 p-2 rounded hover:bg-gray-100 transition">
+                                                <Settings className="w-4 h-4" />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+          )}
+
+          {/* Tab: Policies */}
+          {activeTab === 'policies' && (
+            <div className="space-y-6">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-bold text-gray-800">Politiques</h2>
+                    <button 
+                        onClick={() => handleOpenPolicySidebar()}
+                        className="bg-emerald-500 text-white px-4 py-2 rounded-lg font-medium text-sm hover:bg-emerald-600 transition flex items-center shadow-sm"
+                    >
+                        <Plus className="w-4 h-4 mr-2" /> Créer une politique
+                    </button>
+                </div>
+
+                <div className="rounded-xl border border-gray-200 bg-gray-50">
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="bg-gray-100 border-b border-gray-200 text-xs text-gray-500 uppercase font-semibold">
+                                <th className="px-6 py-3">Nom</th>
+                                <th className="px-6 py-3">Paiement</th>
+                                <th className="px-6 py-3">Politique d'annulation</th>
+                                <th className="px-6 py-3">Caution</th>
+                                <th className="px-6 py-3">Expiration du devis</th>
+                                <th className="px-6 py-3 text-right"></th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white">
+                            {policies.map(policy => (
+                                <tr key={policy.id} className="hover:bg-gray-50 transition group">
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center">
+                                            {policy.id === mainPolicyId ? (
+                                                <Star className="w-4 h-4 text-amber-400 fill-amber-400 mr-2" />
+                                            ) : (
+                                                <div className="w-6"></div>
+                                            )}
+                                            <span className={`font-medium ${policy.id === mainPolicyId ? 'text-gray-900 font-bold' : 'text-gray-700'}`}>{policy.name}</span>
+                                            {policy.id === mainPolicyId && <span className="ml-2 text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100 uppercase font-bold tracking-wider">Principale</span>}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-gray-600">
+                                        <div className="flex flex-col">
+                                            <span>{policy.payment1Percentage}% dû {policy.payment1Timing === 'at_booking' ? 'au moment de la réservation' : `${policy.payment1DaysBefore}j avant l'arrivée`}.</span>
+                                            {policy.paymentSchedule === '2_payments' && (
+                                                <span className="text-xs text-gray-400">Montant résiduel dû à l'arrivée.</span>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-gray-600">
+                                        {policy.cancellationPolicy === 'flexible' && 'Flexible (24h)'}
+                                        {policy.cancellationPolicy === 'moderate' && 'Modérée (5j)'}
+                                        {policy.cancellationPolicy === 'strict' && 'Stricte (14j)'}
+                                        {policy.cancellationPolicy === 'non_refundable' && 'Tous les règlements pré-payés ne sont pas remboursables'}
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-gray-600">
+                                        {policy.securityDepositType === 'none' ? 'Aucune caution n\'est due.' : `${policy.securityDepositAmount}€`}
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-gray-600">
+                                        {policy.quoteExpirationHours} hs
+                                    </td>
+                                    <td className="px-6 py-4 text-right relative">
+                                        <div className="relative inline-block text-left">
+                                            <button 
+                                                onClick={() => setActivePolicyDropdown(activePolicyDropdown === policy.id ? null : policy.id)}
+                                                className="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                            >
+                                                <MoreHorizontal className="w-5 h-5" />
+                                            </button>
+                                            
+                                            {activePolicyDropdown === policy.id && (
+                                                <>
+                                                    <div className="fixed inset-0 z-10" onClick={() => setActivePolicyDropdown(null)}></div>
+                                                    <div className="absolute right-0 mt-2 w-72 origin-top-right bg-white rounded-xl shadow-xl border border-gray-100 z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                                                        <div className="py-1">
+                                                            <button
+                                                                onClick={() => { handleOpenPolicySidebar(policy); setActivePolicyDropdown(null); }}
+                                                                className="flex items-center w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                                                            >
+                                                                <Pencil className="w-4 h-4 mr-3 text-gray-400" />
+                                                                Modifier la politique
+                                                            </button>
+                                                            <button
+                                                                onClick={() => { handleDeletePolicy(policy.id); setActivePolicyDropdown(null); }}
+                                                                className="flex items-center w-full px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                                            >
+                                                                <Trash2 className="w-4 h-4 mr-3 text-red-500" />
+                                                                Supprimer la politique
+                                                            </button>
+                                                            {policy.id !== mainPolicyId && (
+                                                                <button
+                                                                    onClick={() => handleSetMainPolicy(policy.id)}
+                                                                    className="flex items-center w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors border-t border-gray-100"
+                                                                >
+                                                                    <Star className="w-4 h-4 mr-3 text-gray-400" />
+                                                                    Marquer comme politique principale
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+          )}
+
+          {/* Tab: Taxes (Lodgify Style) */}
+          {activeTab === 'taxes' && (
+            <div className="space-y-6">
+                <div>
+                    <h2 className="text-xl font-bold text-gray-800">Taxes</h2>
+                    <p className="text-sm text-gray-500">Configurez l'affichage et les taxes applicables.</p>
+                </div>
+
+                <div className="bg-white border border-gray-200 rounded-xl p-8 shadow-sm">
+                    <h3 className="text-lg font-bold text-gray-800 mb-6">Taxes de vente / TVA</h3>
+                    <div className="mb-6">
+                        <h4 className="font-bold text-sm text-gray-800 mb-4">Paramètres d'affichage</h4>
+                        
+                        <div className="space-y-4">
+                            {/* Option 1: Gross */}
+                            <label className="flex items-start cursor-pointer group">
+                                <div className="flex items-center h-5 mt-1">
+                                    <input 
+                                        type="radio" 
+                                        name="taxDisplay" 
+                                        className="w-5 h-5 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                                        checked={localBrand.taxDisplay !== 'net'} // Default
+                                        onChange={() => setLocalBrand({...localBrand, taxDisplay: 'gross'})}
+                                    />
+                                </div>
+                                <div className="ml-3">
+                                    <span className="block text-sm font-bold text-gray-900 group-hover:text-indigo-700">Toujours afficher mes prix en brut, y compris les taxes de vente / TVA</span>
+                                    <span className="block text-sm text-gray-500 mt-1 leading-relaxed">
+                                        Ce paramètre permet d'afficher vos prix bruts, y compris la taxe de vente / TVA. C'est la manière la plus courante d'afficher les prix en Europe.
+                                    </span>
+                                </div>
+                            </label>
+
+                            {/* Option 2: Net */}
+                            <label className="flex items-start cursor-pointer group">
+                                <div className="flex items-center h-5 mt-1">
+                                    <input 
+                                        type="radio" 
+                                        name="taxDisplay" 
+                                        className="w-5 h-5 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                                        checked={localBrand.taxDisplay === 'net'}
+                                        onChange={() => setLocalBrand({...localBrand, taxDisplay: 'net'})}
+                                    />
+                                </div>
+                                <div className="ml-3">
+                                    <span className="block text-sm font-bold text-gray-900 group-hover:text-indigo-700">Toujours afficher mes prix en net, sans les taxes de vente / TVA</span>
+                                    <span className="block text-sm text-gray-500 mt-1 leading-relaxed">
+                                        Ce paramètre affichera vos prix toujours nets et affichera la taxe de vente dans une rubrique distincte. C'est le moyen généralement utilisé pour afficher la taxe de vente / TVA aux États-Unis.
+                                    </span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm mt-8">
+                    <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                        <h3 className="font-bold text-gray-800">Taxes locales / de séjour</h3>
+                        <button className="text-sm text-indigo-600 font-bold hover:underline flex items-center">
+                            <Plus className="w-4 h-4 mr-1" /> Ajouter une taxe
+                        </button>
+                    </div>
+                    <table className="w-full text-left">
+                        <thead className="bg-white text-gray-500 text-xs uppercase font-semibold border-b border-gray-100">
+                            <tr>
+                                <th className="px-6 py-3">Nom</th>
+                                <th className="px-6 py-3">Type</th>
+                                <th className="px-6 py-3">Montant</th>
+                                <th className="px-6 py-3 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            <tr>
+                                <td className="px-6 py-4 text-sm font-medium text-gray-900">Taxe de séjour</td>
+                                <td className="px-6 py-4 text-sm text-gray-500">Par nuit / pers</td>
+                                <td className="px-6 py-4 text-sm font-mono text-gray-800">2.30 €</td>
+                                <td className="px-6 py-4 text-right">
+                                    <button className="text-gray-400 hover:text-indigo-600"><Settings className="w-4 h-4" /></button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+          )}
+
+          {/* Tab: Inbox */}
+          {activeTab === 'inbox' && (
+            <div className="space-y-6 max-w-4xl">
+                <div>
+                    <h2 className="text-xl font-bold text-gray-800">Boîte de réception</h2>
+                    <p className="text-sm text-gray-500">Personnalisez vos communications et votre signature.</p>
+                </div>
+
+                <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm space-y-4">
+                    <h3 className="font-bold text-gray-800">Signature Email</h3>
+                    <textarea 
+                        className="w-full border border-gray-300 rounded-lg p-3 text-sm bg-white text-gray-900 h-32 focus:ring-2 focus:ring-indigo-500 outline-none"
+                        value={emailSignature}
+                        onChange={(e) => setEmailSignature(e.target.value)}
+                    />
+                    <button className="text-sm bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700">Enregistrer</button>
+                </div>
+
+                <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                    <h3 className="font-bold text-gray-800 mb-2">Alias Email</h3>
+                    <p className="text-sm text-gray-500 mb-4">Utilisez cette adresse pour rediriger les emails vers votre boîte de réception unifiée.</p>
+                    <div className="flex gap-2">
+                        <input 
+                            type="text" 
+                            readOnly 
+                            value={inboxEmailAlias}
+                            className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 font-mono"
+                        />
+                        <button onClick={() => copyToClipboard(inboxEmailAlias)} className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50">
+                            <Copy className="w-4 h-4 text-gray-500" />
+                        </button>
+                    </div>
+                </div>
+            </div>
+          )}
+
+          {/* Tab: Calendars (Restored Logic) */}
+          {activeTab === 'calendars' && (
+            <div className="space-y-6">
+                <div>
+                    <h2 className="text-xl font-bold text-gray-800">Calendriers (iCal)</h2>
+                    <p className="text-sm text-gray-500">Synchronisez vos disponibilités avec des plateformes externes via iCal.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="md:col-span-1 bg-white border border-gray-200 rounded-xl p-4 shadow-sm h-fit">
+                        <h3 className="font-bold text-gray-800 mb-4">Sélectionner un logement</h3>
+                        <div className="space-y-1">
+                            {propertiesWithCalendars.map(prop => (
+                                <button 
+                                    key={prop.id}
+                                    onClick={() => setSelectedImportPropertyId(prop.id)}
+                                    className={`w-full text-left px-3 py-2 rounded-lg text-sm truncate ${selectedImportPropertyId === prop.id ? 'bg-indigo-50 text-indigo-700 font-bold' : 'text-gray-600 hover:bg-gray-50'}`}
+                                >
+                                    {prop.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="md:col-span-2 space-y-6">
+                        {/* Import Section */}
+                        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                            <h3 className="font-bold text-gray-800 mb-4 flex items-center">
+                                <Download className="w-5 h-5 mr-2 text-indigo-600" /> Importer un calendrier
+                            </h3>
+                            <div className="flex gap-2 mb-4">
+                                <input 
+                                    type="text" 
+                                    placeholder="Nom (ex: Airbnb)" 
+                                    className="w-1/3 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+                                    value={importName}
+                                    onChange={(e) => setImportName(e.target.value)}
+                                />
+                                <input 
+                                    type="text" 
+                                    placeholder="URL du calendrier (https://...)" 
+                                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+                                    value={importUrl}
+                                    onChange={(e) => setImportUrl(e.target.value)}
+                                />
+                                <button 
+                                    onClick={handleAddCalendar}
+                                    disabled={!importUrl || !importName}
+                                    className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-indigo-700 disabled:opacity-50"
+                                >
+                                    Ajouter
+                                </button>
+                            </div>
+
+                            <div className="space-y-2">
+                                {selectedImportProperty?.importedCalendars?.map(cal => (
+                                    <div key={cal.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                        <div>
+                                            <p className="font-bold text-sm text-gray-800">{cal.name}</p>
+                                            <p className="text-xs text-gray-500 truncate max-w-xs">{cal.url}</p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-gray-400 mr-2">Sync: {cal.lastSynced}</span>
+                                            <button onClick={() => handleSyncNow(selectedImportProperty.id, cal.id)} className="p-1.5 hover:bg-white rounded border border-transparent hover:border-gray-200 text-gray-500" title="Synchroniser maintenant">
+                                                <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                                            </button>
+                                            <button onClick={() => handleDeleteCalendar(selectedImportProperty.id, cal.id)} className="p-1.5 hover:bg-red-50 rounded text-red-500" title="Supprimer">
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                                {(!selectedImportProperty?.importedCalendars || selectedImportProperty.importedCalendars.length === 0) && (
+                                    <p className="text-sm text-gray-400 italic text-center py-4">Aucun calendrier importé pour ce logement.</p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Export Section */}
+                        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                            <h3 className="font-bold text-gray-800 mb-4 flex items-center">
+                                <Upload className="w-5 h-5 mr-2 text-indigo-600" /> Exporter le calendrier
+                            </h3>
+                            <p className="text-sm text-gray-500 mb-3">Copiez ce lien pour exporter vos réservations vers Airbnb, Booking, etc.</p>
                             <div className="flex gap-2">
                                 <input 
                                     type="text" 
-                                    value={webhookUrls.contractSigned}
-                                    readOnly
-                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono text-gray-500 bg-gray-100"
+                                    readOnly 
+                                    value={`https://api.hostflow.app/ical/export/${selectedImportPropertyId || 'xxx'}/calendar.ics`}
+                                    className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 font-mono"
                                 />
-                                <button onClick={() => copyToClipboard(webhookUrls.contractSigned)} className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600">
-                                    <Copy className="w-4 h-4" />
+                                <button onClick={() => copyToClipboard(`https://api.hostflow.app/ical/export/${selectedImportPropertyId}/calendar.ics`)} className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50">
+                                    Copier
                                 </button>
                             </div>
                         </div>
-                        <div className="pt-2">
-                            <button onClick={() => handleSaveSettings()} className="text-sm text-pink-600 font-bold hover:text-pink-800 flex items-center">
-                                <Save className="w-4 h-4 mr-1" /> Sauvegarder les webhooks
-                            </button>
-                        </div>
                     </div>
                 </div>
+            </div>
+          )}
 
-               <div className="border-t border-gray-100"></div>
+          {/* Tab: Connections */}
+          {activeTab === 'connections' && (
+            <div className="space-y-6">
+                <div>
+                    <h2 className="text-xl font-bold text-gray-800">Canaux & Intégrations</h2>
+                    <p className="text-sm text-gray-500">Connectez vos comptes pour synchroniser les données.</p>
+                </div>
 
-               {/* --- SECTION 2: ICAL (LIST VIEW) --- */}
-               <div>
-                 <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
-                    <div>
-                      <h2 className="text-lg font-bold text-gray-800 flex items-center">
-                        <Calendar className="w-5 h-5 mr-2 text-amber-600" />
-                        2. Synchronisation iCal (Immédiat)
-                      </h2>
-                      <p className="text-sm text-gray-500 mt-1 max-w-3xl">
-                        Solution idéale pour démarrer sans validation technique. Synchronise les calendriers toutes les 2 heures.
-                        <br/><span className="text-xs text-gray-400 italic">N'utilise pas l'API de connexion directe. Ne synchronise pas les prix ni les messages.</span>
-                      </p>
-                    </div>
-                 </div>
-
-                 {/* PROPERTIES LIST */}
-                 <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100 bg-gray-50/50">
-                    
-                    {/* Header Row */}
-                    <div className="hidden md:grid grid-cols-12 px-4 py-3 bg-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                       <div className="col-span-5">Logement</div>
-                       <div className="col-span-4">Lien Export</div>
-                       <div className="col-span-3 text-right">Action</div>
-                    </div>
-
-                    {MOCK_PROPERTIES.map(p => {
-                       const isExpanded = expandedPropertyId === p.id;
-                       const calendarCount = (calendarsByProperty[p.id] || []).length;
-                       const exportLink = getHostFlowIcalLink(p.id);
-
-                       return (
-                         <div key={p.id} className="bg-white transition-colors hover:bg-gray-50">
-                            {/* Summary Row */}
-                            <div className="grid grid-cols-1 md:grid-cols-12 px-4 py-3 items-center gap-3">
-                               
-                               {/* Col 1: Name */}
-                               <div className="md:col-span-5 flex items-center">
-                                  <div onClick={() => setExpandedPropertyId(isExpanded ? null : p.id)} className="cursor-pointer mr-3 text-gray-400 hover:text-indigo-600">
-                                     {isExpanded ? <ChevronDown className="w-5 h-5"/> : <ChevronRight className="w-5 h-5"/>}
-                                  </div>
-                                  <div className="flex items-center">
-                                     <img src={p.imageUrl} className="w-8 h-8 rounded object-cover mr-3 bg-gray-200" />
-                                     <div>
-                                        <p className="text-sm font-bold text-gray-800">{p.name}</p>
-                                        <p className="text-xs text-gray-400 truncate w-32 md:w-auto">{p.address}</p>
-                                     </div>
-                                  </div>
-                               </div>
-
-                               {/* Col 2: Quick Export Link (Read only preview) */}
-                               <div className="md:col-span-4 flex items-center">
-                                  <span className="text-[10px] text-gray-400 font-mono truncate max-w-[200px] select-all cursor-text bg-gray-50 px-2 py-1 rounded border border-gray-100">
-                                    {exportLink}
-                                  </span>
-                               </div>
-
-                               {/* Col 3: Status & Action */}
-                               <div className="md:col-span-3 flex items-center justify-end">
-                                  {calendarCount > 0 ? (
-                                    <span className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium mr-3 flex items-center">
-                                       <RefreshCw className="w-3 h-3 mr-1"/> {calendarCount} sync
-                                    </span>
-                                  ) : (
-                                    <span className="text-[10px] text-gray-400 mr-3">Aucun import</span>
-                                  )}
-                                  <button 
-                                    onClick={() => setExpandedPropertyId(isExpanded ? null : p.id)}
-                                    className={`text-xs border px-3 py-1.5 rounded-lg transition ${isExpanded ? 'bg-indigo-600 text-white border-indigo-600 font-medium' : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'}`}
-                                  >
-                                    {isExpanded ? 'Fermer' : 'Configurer'}
-                                  </button>
-                               </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {connections.map(conn => (
+                        <div key={conn.id} className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm flex flex-col justify-between h-full hover:border-indigo-300 transition-colors">
+                            <div>
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="w-12 h-12 rounded-lg flex items-center justify-center text-2xl bg-gray-50 border border-gray-100" style={{ color: conn.color }}>
+                                        {conn.icon}
+                                    </div>
+                                    {conn.connected ? (
+                                        <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded-full flex items-center">
+                                            <CheckCircle className="w-3 h-3 mr-1" /> Connecté
+                                        </span>
+                                    ) : (
+                                        <span className="bg-gray-100 text-gray-500 text-xs font-bold px-2 py-1 rounded-full">
+                                            Déconnecté
+                                        </span>
+                                    )}
+                                </div>
+                                <h3 className="font-bold text-gray-900 text-lg mb-1">{conn.name}</h3>
+                                <p className="text-sm text-gray-500 mb-6">{conn.description}</p>
                             </div>
-
-                            {/* EXPANDED DETAILS - LODGIFY STYLE */}
-                            {isExpanded && (
-                               <div className="px-4 pb-6 pt-2 bg-gray-50/50 border-t border-gray-100">
-                                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                     
-                                     {/* Left: IMPORT */}
-                                     <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
-                                        <h4 className="font-bold text-gray-800 mb-2 flex items-center">
-                                          <Calendar className="w-4 h-4 mr-2 text-indigo-600"/>
-                                          Importer le calendrier
-                                        </h4>
-                                        <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-                                          Collez ici le lien iCal (format .ics) provenant d'Airbnb, Booking, ou Abritel. 
-                                        </p>
-
-                                        {/* List of imports */}
-                                        <div className="space-y-2 mb-4">
-                                           {(calendarsByProperty[p.id] || []).length === 0 ? (
-                                              <div className="text-xs text-gray-400 italic text-center py-4 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                                                Il n'y a aucun calendrier synchronisé pour le moment.
-                                              </div>
-                                           ) : (
-                                              (calendarsByProperty[p.id] || []).map(cal => (
-                                                <div key={cal.id} className="flex justify-between items-center bg-gray-50 p-2 rounded border border-gray-200 text-sm group">
-                                                   <div className="flex items-center overflow-hidden">
-                                                      <div className="w-2 h-2 rounded-full bg-green-500 mr-2 shrink-0"></div>
-                                                      <span className="font-medium text-gray-700 mr-2 shrink-0">{cal.name}</span>
-                                                      <span className="text-[10px] text-gray-400 truncate">{cal.url}</span>
-                                                   </div>
-                                                   <button onClick={() => handleRemoveIcal(p.id, cal.id)} className="text-gray-400 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-4 h-4"/></button>
-                                                </div>
-                                              ))
-                                           )}
-                                        </div>
-
-                                        {/* Actions */}
-                                        <div className="flex flex-col gap-3">
-                                           {/* Add Form */}
-                                           <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                              <div className="grid grid-cols-3 gap-2 mb-2">
-                                                 <input 
-                                                   type="text" 
-                                                   placeholder="Nom (ex: Airbnb)" 
-                                                   className="col-span-1 text-xs border border-gray-300 rounded px-2 py-1.5 focus:ring-1 focus:ring-indigo-500 outline-none text-gray-900"
-                                                   value={newIcalName}
-                                                   onChange={(e) => setNewIcalName(e.target.value)}
-                                                 />
-                                                 <input 
-                                                   type="text" 
-                                                   placeholder="URL iCal (https://...)" 
-                                                   className="col-span-2 text-xs border border-gray-300 rounded px-2 py-1.5 focus:ring-1 focus:ring-indigo-500 outline-none text-gray-900"
-                                                   value={newIcalUrl}
-                                                   onChange={(e) => setNewIcalUrl(e.target.value)}
-                                                 />
-                                              </div>
-                                              <button 
-                                                 onClick={() => handleAddIcal(p.id)}
-                                                 disabled={!newIcalName || !newIcalUrl}
-                                                 className="w-full bg-[#FF6B6B] text-white py-1.5 rounded text-xs font-bold hover:bg-[#ff5252] disabled:opacity-50 flex justify-center items-center"
-                                              >
-                                                <Plus className="w-3 h-3 mr-1" /> Ajouter un calendrier
-                                              </button>
-                                           </div>
-
-                                           {/* Sync Button */}
-                                           <div className="flex items-center justify-between">
-                                              <span className="text-[10px] text-green-600 flex items-center">
-                                                <CheckCircle className="w-3 h-3 mr-1"/> Le calendrier se rafraîchit toutes les 2 heures
-                                              </span>
-                                              <button 
-                                                onClick={() => handleSyncNow(p.id)}
-                                                className="text-indigo-600 text-xs font-medium hover:text-indigo-800 flex items-center bg-indigo-50 px-3 py-1.5 rounded-lg transition"
-                                              >
-                                                <RefreshCw className={`w-3 h-3 mr-1 ${isSyncing === p.id ? 'animate-spin' : ''}`} /> 
-                                                {isSyncing === p.id ? 'Synchronisation...' : 'Synchroniser maintenant'}
-                                              </button>
-                                           </div>
-                                        </div>
-                                     </div>
-
-                                     {/* Right: EXPORT */}
-                                     <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between">
-                                        <div>
-                                          <h4 className="font-bold text-gray-800 mb-2 flex items-center">
-                                            <ExternalLink className="w-4 h-4 mr-2 text-amber-500"/>
-                                            Exporter le calendrier
-                                          </h4>
-                                          <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-                                            Copiez cette URL pour l'ajouter sur Airbnb ou Booking. Cela permet de bloquer les dates réservées sur HostFlow.
-                                          </p>
-
-                                          <div className="flex items-center bg-gray-100 p-3 rounded-lg border border-gray-200 mb-4">
-                                            <code className="text-[10px] text-gray-600 break-all flex-1 font-mono">
-                                              {exportLink}
-                                            </code>
-                                            <button 
-                                              onClick={() => copyToClipboard(exportLink)}
-                                              className="ml-3 p-1.5 bg-white border border-gray-300 rounded hover:bg-gray-50 text-gray-600"
-                                            >
-                                              <Copy className="w-3 h-3" />
-                                            </button>
-                                          </div>
-                                        </div>
-                                     </div>
-
-                                  </div>
-                               </div>
-                            )}
-                         </div>
-                       );
-                    })}
-                 </div>
-               </div>
-             </div>
-           )}
-
-           {activeTab === 'notifications' && (
-             <div className="text-center py-20 text-gray-500">
-               <Bell className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-               <p>Configuration des alertes et emails.</p>
-             </div>
-           )}
+                            <button className={`w-full py-2 rounded-lg font-bold text-sm transition ${conn.connected ? 'border border-gray-300 text-gray-700 hover:bg-gray-50' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}>
+                                {conn.connected ? 'Configurer' : 'Connecter'}
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+          )}
 
         </div>
       </div>
 
-      {/* --- BOOKING.COM WIZARD MODAL --- */}
-      {isBookingModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl">
-             
-             {/* Modal Header */}
-             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#003580] text-white">
-                <div className="flex items-center">
-                   <img src="https://upload.wikimedia.org/wikipedia/commons/b/be/Booking.com_logo.svg" className="h-6 w-auto mr-3 brightness-0 invert" alt="Booking" />
-                   <h2 className="text-lg font-bold">Assistant de Connexion</h2>
+      {/* --- RIGHT SIDEBAR FOR POLICY EDITING --- */}
+      {isPolicySidebarOpen && editingPolicy && (
+          <>
+            <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 transition-opacity" onClick={() => setIsPolicySidebarOpen(false)}></div>
+            <div className="fixed top-0 right-0 bottom-0 w-[550px] bg-white z-50 shadow-2xl flex flex-col transform transition-transform animate-in slide-in-from-right duration-300 border-l border-gray-200">
+                <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-white">
+                    <h2 className="text-xl font-bold text-gray-800">{editingPolicy.id.startsWith('pol-') && !policies.find(p => p.id === editingPolicy.id) ? 'Ajouter une politique' : 'Modifier la politique'}</h2>
+                    <button onClick={() => setIsPolicySidebarOpen(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-500"><X className="w-5 h-5" /></button>
                 </div>
-                <button onClick={() => setIsBookingModalOpen(false)} className="p-1 hover:bg-white/20 rounded-full"><X className="w-6 h-6"/></button>
-             </div>
-
-             {/* Modal Body */}
-             <div className="p-8">
                 
-                {/* STEP 1: AUTH */}
-                {bookingStep === 1 && (
-                   <div className="space-y-6">
-                      <div className="text-center mb-8">
-                         <h3 className="text-xl font-bold text-gray-800">Étape 1 : Identifiant Établissement</h3>
-                         <p className="text-gray-500 mt-2">
-                           Sur l'extranet Booking.com, sélectionnez "HostFlow Connectivity" comme fournisseur, puis entrez votre ID Hôtel ci-dessous.
-                         </p>
-                      </div>
-
-                      <div className="max-w-sm mx-auto">
-                        <label className="block text-xs font-bold text-gray-700 uppercase mb-2">Legal Entity ID (LEID) ou Hotel ID</label>
+                <div className="flex-1 overflow-y-auto p-8 space-y-8 bg-white">
+                    
+                    {/* Nom */}
+                    <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">Nom interne *</label>
                         <input 
-                           type="text" 
-                           placeholder="ex: 1234567"
-                           className="w-full border border-gray-300 rounded-xl px-4 py-3 text-lg font-mono focus:ring-2 focus:ring-[#003580] outline-none text-center tracking-widest text-gray-900"
-                           value={bookingIdInput}
-                           onChange={(e) => setBookingIdInput(e.target.value)}
+                            type="text" 
+                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white text-gray-900 focus:ring-1 focus:ring-emerald-500 outline-none"
+                            placeholder="ex. : Pré-paiement partiel- non remboursable"
+                            value={editingPolicy.name}
+                            onChange={(e) => setEditingPolicy({...editingPolicy, name: e.target.value})}
                         />
-                      </div>
+                    </div>
 
-                      <div className="flex justify-end pt-4">
-                        <button 
-                          onClick={handleBookingVerify}
-                          disabled={!bookingIdInput || isVerifyingId}
-                          className="w-full bg-[#003580] text-white font-bold py-3 rounded-xl hover:bg-[#002860] flex justify-center items-center disabled:opacity-70"
+                    {/* Planification du paiement */}
+                    <div>
+                        <h3 className="font-bold text-sm text-gray-800 mb-4 border-b pb-2">Planification du paiement</h3>
+                        
+                        <div className="mb-4">
+                            <select 
+                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white text-gray-900 outline-none focus:ring-1 focus:ring-emerald-500"
+                                value={editingPolicy.paymentSchedule}
+                                onChange={(e) => setEditingPolicy({...editingPolicy, paymentSchedule: e.target.value as any})}
+                            >
+                                <option value="1_payment">1 paiement</option>
+                                <option value="2_payments">2 paiements</option>
+                            </select>
+                        </div>
+
+                        {/* Payment 1 Row */}
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">Paiement 1</label>
+                            <div className="flex items-center gap-2">
+                                <div className="relative w-20 shrink-0">
+                                    <input 
+                                        type="number" 
+                                        className="w-full border border-gray-300 rounded px-2 py-2 text-sm bg-white text-gray-900 pr-6"
+                                        value={editingPolicy.payment1Percentage}
+                                        onChange={(e) => setEditingPolicy({...editingPolicy, payment1Percentage: parseInt(e.target.value)})}
+                                    />
+                                    <span className="absolute right-2 top-2 text-gray-500 text-sm">%</span>
+                                </div>
+                                <div className="bg-gray-100 text-gray-600 px-3 py-2 text-sm rounded border border-gray-200 flex-1 whitespace-nowrap overflow-hidden text-ellipsis">
+                                    % du montant de la réservation
+                                </div>
+                                <select 
+                                    className="w-1/3 border border-gray-300 rounded px-3 py-2 text-sm bg-white text-gray-900 outline-none focus:ring-1 focus:ring-emerald-500"
+                                    value={editingPolicy.payment1Timing}
+                                    onChange={(e) => setEditingPolicy({...editingPolicy, payment1Timing: e.target.value as any})}
+                                >
+                                    <option value="at_booking">au moment de la réservation</option>
+                                    <option value="before_arrival">avant l'arrivée</option>
+                                </select>
+                            </div>
+                            {editingPolicy.payment1Timing === 'before_arrival' && (
+                                <div className="mt-2 flex items-center gap-2 text-sm text-gray-600 ml-1">
+                                    <span className="text-xs">Dû</span>
+                                    <input 
+                                        type="number" 
+                                        className="w-16 border border-gray-300 rounded px-2 py-1 text-sm text-gray-900" 
+                                        value={editingPolicy.payment1DaysBefore || 0}
+                                        onChange={(e) => setEditingPolicy({...editingPolicy, payment1DaysBefore: parseInt(e.target.value)})}
+                                    />
+                                    <span className="text-xs">jours avant l'arrivée</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Annulation de l'invité */}
+                    <div>
+                        <h3 className="font-bold text-sm text-gray-800 mb-4 border-b pb-2">Annulation de l'invité</h3>
+                        <div className="space-y-2">
+                            <select 
+                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white text-gray-900 outline-none focus:ring-1 focus:ring-emerald-500"
+                                value={editingPolicy.cancellationPolicy}
+                                onChange={(e) => setEditingPolicy({...editingPolicy, cancellationPolicy: e.target.value as any})}
+                            >
+                                <option value="non_refundable">Non-remboursable</option>
+                                <option value="strict">Stricte</option>
+                                <option value="moderate">Modérée</option>
+                                <option value="flexible">Flexible</option>
+                            </select>
+                            <p className="text-xs text-gray-500 leading-relaxed">
+                                {editingPolicy.cancellationPolicy === 'non_refundable' && "Tout montant déjà payé n'est pas remboursable. Les soldes restants impayés ne seront pas facturés."}
+                                {editingPolicy.cancellationPolicy === 'strict' && "Remboursement intégral jusqu'à 14 jours avant l'arrivée."}
+                                {editingPolicy.cancellationPolicy === 'moderate' && "Remboursement intégral jusqu'à 5 jours avant l'arrivée."}
+                                {editingPolicy.cancellationPolicy === 'flexible' && "Remboursement intégral jusqu'à 24 heures avant l'arrivée."}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Caution */}
+                    <div>
+                        <h3 className="font-bold text-sm text-gray-800 mb-4 border-b pb-2">Caution</h3>
+                        <select 
+                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white text-gray-900 outline-none focus:ring-1 focus:ring-emerald-500"
+                            value={editingPolicy.securityDepositType}
+                            onChange={(e) => setEditingPolicy({...editingPolicy, securityDepositType: e.target.value as any})}
                         >
-                          {isVerifyingId ? <Loader className="w-5 h-5 animate-spin" /> : 'Vérifier & Continuer'}
-                        </button>
-                      </div>
-                   </div>
-                )}
+                            <option value="none">Une caution n'est pas requise</option>
+                            <option value="fixed">Caution fixe</option>
+                        </select>
+                        {editingPolicy.securityDepositType === 'fixed' && (
+                            <div className="mt-2">
+                                <label className="block text-xs text-gray-500 mb-1">Montant</label>
+                                <div className="relative w-32">
+                                    <input 
+                                        type="number" 
+                                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white text-gray-900 pr-6"
+                                        value={editingPolicy.securityDepositAmount || 0}
+                                        onChange={(e) => setEditingPolicy({...editingPolicy, securityDepositAmount: parseInt(e.target.value)})}
+                                    />
+                                    <span className="absolute right-3 top-2 text-gray-500 text-sm">€</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
 
-                {/* STEP 2: MAPPING */}
-                {bookingStep === 2 && (
-                   <div className="space-y-6">
-                      <div className="mb-4">
-                         <h3 className="text-lg font-bold text-gray-800">Étape 2 : Cartographie (Mapping)</h3>
-                         <p className="text-sm text-gray-500">
-                           Nous avons trouvé ces annonces sur Booking.com. <br/>
-                           Associez-les à vos logements HostFlow existants <b>OU</b> importez-les pour en créer de nouveaux.
-                         </p>
-                      </div>
+                    {/* Expiration du devis */}
+                    <div>
+                        <h3 className="font-bold text-sm text-gray-800 mb-4 border-b pb-2">Expiration du devis</h3>
+                        <div className="relative w-24 mb-2">
+                            <input 
+                                type="number" 
+                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white text-gray-900 pr-8"
+                                value={editingPolicy.quoteExpirationHours}
+                                onChange={(e) => setEditingPolicy({...editingPolicy, quoteExpirationHours: parseInt(e.target.value)})}
+                            />
+                            <span className="absolute right-3 top-2 text-gray-500 text-sm">hs</span>
+                        </div>
+                        <p className="text-xs text-gray-500 leading-relaxed">
+                            Le devis est valable pour {editingPolicy.quoteExpirationHours} heures maximum lorsqu'un devis a le statut "En attente de l'invité" ou "En attente de paiement".
+                        </p>
+                    </div>
 
-                      <div className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden">
-                         <table className="w-full text-left text-sm">
-                            <thead className="bg-gray-100 text-gray-500 font-semibold border-b border-gray-200">
-                               <tr>
-                                  <th className="p-3">Annonce Booking.com</th>
-                                  <th className="p-3 text-center"><ArrowRight className="w-4 h-4 mx-auto"/></th>
-                                  <th className="p-3">Action dans HostFlow</th>
-                               </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200 bg-white">
-                               {foundBookingListings.map(listing => (
-                                  <tr key={listing.id}>
-                                     <td className="p-3">
-                                        <p className="font-bold text-[#003580]">{listing.name}</p>
-                                        <p className="text-xs text-gray-400">{listing.address}</p>
-                                     </td>
-                                     <td className="p-3 text-center">
-                                        <Link className="w-4 h-4 text-gray-300 mx-auto" />
-                                     </td>
-                                     <td className="p-3">
-                                        <select 
-                                           className="w-full border border-gray-300 rounded-lg p-2 text-sm outline-none focus:border-[#003580] text-gray-700"
-                                           value={mappingSelections[listing.id] || 'import_new'}
-                                           onChange={(e) => setMappingSelections({...mappingSelections, [listing.id]: e.target.value})}
-                                        >
-                                           <option value="import_new" className="font-bold text-green-600">✨ Importer comme nouveau logement</option>
-                                           <optgroup label="Lier à l'existant">
-                                              {MOCK_PROPERTIES.map(p => (
-                                                 <option key={p.id} value={p.id}>{p.name}</option>
-                                              ))}
-                                           </optgroup>
-                                        </select>
-                                     </td>
-                                  </tr>
-                               ))}
-                            </tbody>
-                         </table>
-                      </div>
+                </div>
 
-                      <div className="flex justify-between pt-4 border-t border-gray-100">
-                        <button onClick={() => setBookingStep(1)} className="text-gray-500 hover:text-gray-800 font-medium px-4">Retour</button>
-                        <button 
-                          onClick={handleBookingFinish}
-                          className="bg-green-600 text-white font-bold py-2.5 px-6 rounded-xl hover:bg-green-700 flex items-center shadow-md"
+                <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
+                    <button onClick={() => setIsPolicySidebarOpen(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded font-bold text-sm transition">
+                        Annuler
+                    </button>
+                    <button onClick={handleSavePolicy} className="px-6 py-2 bg-emerald-400 hover:bg-emerald-500 text-white rounded font-bold text-sm shadow-sm transition">
+                        Ajouter
+                    </button>
+                </div>
+            </div>
+          </>
+      )}
+
+      {/* --- RIGHT SIDEBAR FOR FEE EDITING --- */}
+      {isFeeSidebarOpen && editingFee && (
+          <>
+            <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 transition-opacity" onClick={() => setIsFeeSidebarOpen(false)}></div>
+            <div className="fixed top-0 right-0 bottom-0 w-[500px] bg-white z-50 shadow-2xl flex flex-col transform transition-transform animate-in slide-in-from-right duration-300 border-l border-gray-200">
+                <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-white">
+                    <h2 className="text-xl font-bold text-gray-800">Créer un frais</h2>
+                    <button onClick={() => setIsFeeSidebarOpen(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-500"><X className="w-5 h-5" /></button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-white">
+                    {/* Name */}
+                    <div>
+                        <div className="flex justify-between mb-1">
+                            <label className="block text-sm font-bold text-gray-700">Nom</label>
+                            <span className="text-xs text-gray-400 flex items-center"><Globe className="w-3 h-3 mr-1"/> FR (Français)</span>
+                        </div>
+                        <input 
+                            type="text" 
+                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white text-gray-900 focus:ring-1 focus:ring-emerald-500 outline-none"
+                            placeholder="ex: Frais de ménage"
+                            value={editingFee.name}
+                            onChange={(e) => setEditingFee({...editingFee, name: e.target.value})}
+                        />
+                    </div>
+
+                    {/* Type */}
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1">Type de frais</label>
+                        <select 
+                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white text-gray-900 focus:ring-1 focus:ring-emerald-500 outline-none"
+                            value={editingFee.type}
+                            onChange={(e) => setEditingFee({...editingFee, type: e.target.value})}
                         >
-                          <Check className="w-5 h-5 mr-2" />
-                          Confirmer la connexion
-                        </button>
-                      </div>
-                   </div>
-                )}
+                            {FEE_TYPES_LIST.map(type => (
+                                <option key={type} value={type}>{type}</option>
+                            ))}
+                        </select>
+                    </div>
 
-             </div>
-          </div>
-        </div>
+                    {/* Calculation Model - Radio Buttons */}
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Modèle de calcul</label>
+                        <div className="flex items-center space-x-6">
+                            <label className="flex items-center cursor-pointer group">
+                                <input 
+                                    type="radio" 
+                                    name="calcType" 
+                                    checked={editingFee.calculationType === 'flat'} 
+                                    onChange={() => setEditingFee({...editingFee, calculationType: 'flat'})}
+                                    className="w-4 h-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 bg-white"
+                                />
+                                <span className="ml-2 text-sm text-gray-700 group-hover:text-gray-900">Frais fixe</span>
+                            </label>
+                            <label className="flex items-center cursor-pointer group">
+                                <input 
+                                    type="radio" 
+                                    name="calcType" 
+                                    checked={editingFee.calculationType === 'percent'} 
+                                    onChange={() => setEditingFee({...editingFee, calculationType: 'percent'})}
+                                    className="w-4 h-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 bg-white"
+                                />
+                                <span className="ml-2 text-sm text-gray-700 group-hover:text-gray-900">Pourcentage</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    {/* Amount & Frequency */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="relative">
+                            <input 
+                                type="number" 
+                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white text-gray-900 pr-8 focus:ring-1 focus:ring-emerald-500 outline-none"
+                                value={editingFee.amount}
+                                onChange={(e) => setEditingFee({...editingFee, amount: parseFloat(e.target.value)})}
+                            />
+                            <span className="absolute right-3 top-2 text-gray-500 text-sm">
+                                {editingFee.calculationType === 'flat' ? '€' : '%'}
+                            </span>
+                        </div>
+                        <div>
+                            <select 
+                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white text-gray-900 focus:ring-1 focus:ring-emerald-500 outline-none"
+                                value={editingFee.frequency}
+                                onChange={(e) => setEditingFee({...editingFee, frequency: e.target.value as any})}
+                            >
+                                <option value="per_stay">Par séjour</option>
+                                <option value="per_night">Par nuit</option>
+                                <option value="per_person">Par personne</option>
+                                <option value="per_night_per_person">Par nuit / pers</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Toggles */}
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-bold text-gray-800">Restriction séjour court</p>
+                                <p className="text-xs text-gray-500">Appliquez ce frais uniquement lorsque le séjour est trop court.</p>
+                            </div>
+                            <div className="relative inline-block w-10 align-middle select-none transition duration-200 ease-in">
+                                <input 
+                                    type="checkbox" 
+                                    name="toggleShort" 
+                                    id="toggleShort" 
+                                    className="absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer checked:right-0 checked:border-emerald-500"
+                                    checked={editingFee.shortStayOnly}
+                                    onChange={(e) => setEditingFee({...editingFee, shortStayOnly: e.target.checked})}
+                                />
+                                <label htmlFor="toggleShort" className={`block overflow-hidden h-5 rounded-full cursor-pointer ${editingFee.shortStayOnly ? 'bg-emerald-500' : 'bg-gray-300'}`}></label>
+                            </div>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-bold text-gray-800">TVA</p>
+                                <p className="text-xs text-gray-500">Définissez la taxe de vente / TVA de ce frais.</p>
+                            </div>
+                            <div className="relative inline-block w-10 align-middle select-none transition duration-200 ease-in">
+                                <input 
+                                    type="checkbox" 
+                                    name="toggleTax" 
+                                    id="toggleTax" 
+                                    className="absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer checked:right-0 checked:border-emerald-500"
+                                    checked={editingFee.taxable}
+                                    onChange={(e) => setEditingFee({...editingFee, taxable: e.target.checked})}
+                                />
+                                <label htmlFor="toggleTax" className={`block overflow-hidden h-5 rounded-full cursor-pointer ${editingFee.taxable ? 'bg-emerald-500' : 'bg-gray-300'}`}></label>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Property Selection - White Checkboxes */}
+                    <div className="pt-2">
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Sélectionner les hébergements</label>
+                        <p className="text-xs text-gray-500 mb-3">Attribuer ce frais à un ou plusieurs hébergements</p>
+                        
+                        <div className="bg-white border border-gray-300 rounded max-h-48 overflow-y-auto">
+                            <div className="p-2 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
+                                <input type="text" placeholder="Rechercher" className="text-xs bg-transparent outline-none w-full" />
+                            </div>
+                            <div className="p-2 space-y-1">
+                                <label className="flex items-center p-2 hover:bg-gray-50 rounded cursor-pointer group">
+                                    <div className="relative flex items-center">
+                                        <input 
+                                            type="checkbox" 
+                                            className="peer h-4 w-4 cursor-pointer appearance-none rounded border border-gray-300 bg-white checked:border-emerald-500 checked:bg-emerald-500 transition-all mr-3"
+                                            checked={selectedFeeProperties.length === properties.length && properties.length > 0}
+                                            onChange={(e) => {
+                                                if (e.target.checked) setSelectedFeeProperties(properties.map(p => p.id));
+                                                else setSelectedFeeProperties([]);
+                                            }}
+                                        />
+                                        <CheckCircle className="absolute left-0 top-0 h-4 w-4 hidden text-white peer-checked:block pointer-events-none mr-3" />
+                                    </div>
+                                    <span className="text-sm font-bold text-gray-700">Tous les hébergements ({properties.length})</span>
+                                </label>
+                                
+                                {properties.map(prop => (
+                                    <label key={prop.id} className="flex items-center p-2 hover:bg-gray-50 rounded cursor-pointer pl-6">
+                                        <div className="relative flex items-center">
+                                            <input 
+                                                type="checkbox" 
+                                                className="peer h-4 w-4 cursor-pointer appearance-none rounded border border-gray-300 bg-white checked:border-emerald-500 checked:bg-emerald-500 transition-all mr-3"
+                                                checked={selectedFeeProperties.includes(prop.id)}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) setSelectedFeeProperties([...selectedFeeProperties, prop.id]);
+                                                    else setSelectedFeeProperties(selectedFeeProperties.filter(id => id !== prop.id));
+                                                }}
+                                            />
+                                            <CheckCircle className="absolute left-0 top-0 h-4 w-4 hidden text-white peer-checked:block pointer-events-none mr-3" />
+                                        </div>
+                                        <span className="text-sm text-gray-600 truncate">{prop.name}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
+                    <button onClick={() => setIsFeeSidebarOpen(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded font-bold text-sm transition">
+                        Annuler
+                    </button>
+                    <button onClick={handleSaveFee} className="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded font-bold text-sm shadow-sm transition">
+                        Enregistrer
+                    </button>
+                </div>
+            </div>
+          </>
       )}
 
     </div>

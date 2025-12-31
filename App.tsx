@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { MOCK_USERS, MOCK_PROPERTIES, MOCK_RESERVATIONS, MOCK_TASKS, MOCK_CONVERSATIONS, MOCK_LAUNDRY_ORDERS, MOCK_GUESTS, MOCK_INCIDENTS, MOCK_TENANTS } from './constants';
 import { UserRole, Property, BrandSettings, User, Reservation, Task, Conversation, LaundryOrder, GuestProfile, Incident, IncidentStatus, IncidentPriority, Tenant } from './types';
@@ -32,7 +33,9 @@ import {
   User as UserIcon,
   LifeBuoy,
   LogOut,
-  Building
+  Building,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 interface SidebarItemProps {
@@ -41,23 +44,34 @@ interface SidebarItemProps {
   active: boolean;
   onClick: () => void;
   badge?: string;
+  collapsed?: boolean;
 }
 
-const SidebarItem: React.FC<SidebarItemProps> = ({ icon: Icon, label, active, onClick, badge }) => (
+const SidebarItem: React.FC<SidebarItemProps> = ({ icon: Icon, label, active, onClick, badge, collapsed }) => (
   <button
     onClick={onClick}
-    className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors duration-200 ${
+    title={collapsed ? label : undefined}
+    className={`w-full flex items-center ${collapsed ? 'justify-center px-2' : 'justify-between px-4'} py-3 rounded-lg transition-all duration-200 group relative ${
       active ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
     }`}
   >
-    <div className="flex items-center space-x-3">
-      <Icon className="w-5 h-5" />
-      <span className="font-medium">{label}</span>
+    <div className={`flex items-center ${collapsed ? 'justify-center' : 'space-x-3'}`}>
+      <Icon className={`w-5 h-5 ${collapsed ? 'group-hover:scale-110 transition-transform' : ''}`} />
+      {!collapsed && <span className="font-medium whitespace-nowrap">{label}</span>}
     </div>
+    
+    {/* Badge Logic */}
     {badge && badge !== '0' && (
-      <span className="bg-indigo-100 text-indigo-600 text-xs font-bold px-2 py-0.5 rounded-full">
-        {badge}
-      </span>
+      collapsed ? (
+        <span className="absolute top-2 right-2 flex h-2.5 w-2.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-500"></span>
+        </span>
+      ) : (
+        <span className="bg-indigo-100 text-indigo-600 text-xs font-bold px-2 py-0.5 rounded-full">
+          {badge}
+        </span>
+      )
     )}
   </button>
 );
@@ -73,7 +87,8 @@ export default function App() {
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(MOCK_TENANTS[0] || null);
   const [currentUser, setCurrentUser] = useState<User>(MOCK_USERS[0]);
   const [currentView, setCurrentView] = useState<string>('dashboard');
-  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true); // Mobile drawer state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false); // Desktop collapsed state
   
   const [properties, setProperties] = useState<Property[]>(MOCK_PROPERTIES);
   const [reservations, setReservations] = useState<Reservation[]>(MOCK_RESERVATIONS);
@@ -95,14 +110,35 @@ export default function App() {
   const [selectedGuestIdToView, setSelectedGuestIdToView] = useState<string | null>(null);
   const [selectedReservationIdForPortal, setSelectedReservationIdForPortal] = useState<string | null>(null);
 
+  // --- URL PARAMETER HANDLING (DEEP LINKING) ---
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const guestRef = params.get('guest_ref');
+    
+    if (guestRef) {
+      // If URL contains ?guest_ref=r1, switch directly to Guest Portal Mode
+      const reservation = MOCK_RESERVATIONS.find(r => r.id === guestRef);
+      if (reservation) {
+        setSelectedReservationIdForPortal(guestRef);
+        // Switch user context to Guest to hide sidebar
+        const guestUser = { ...MOCK_USERS[0], role: UserRole.GUEST, name: reservation.guestName };
+        setCurrentUser(guestUser);
+        setCurrentView('guest');
+      }
+    }
+  }, []);
+
   useEffect(() => {
     if (currentTenant) {
-      setCurrentView('dashboard');
+      // Only reset view if NOT in guest mode via URL
+      if (window.location.search.indexOf('guest_ref') === -1) {
+          setCurrentView('dashboard');
+      }
       
       const tenantUser = MOCK_USERS.find(
         (u) => u.tenantId === currentTenant.id && u.role === UserRole.AGENCY_ADMIN
       );
-      if (tenantUser) {
+      if (tenantUser && window.location.search.indexOf('guest_ref') === -1) {
         setCurrentUser(tenantUser);
       }
 
@@ -166,6 +202,10 @@ export default function App() {
       setEditingPropertyId(null);
       setCurrentView('properties');
     }
+  };
+
+  const handleUpdateProperties = (updatedProperties: Property[]) => {
+      setProperties(updatedProperties);
   };
 
   const handleCreateIncident = (newIncident: Incident): void => {
@@ -285,6 +325,8 @@ export default function App() {
             initialReservationId={selectedReservationIdForPortal} 
             onCreateIncident={handleCreateIncident}
             incidents={tIncidents}
+            properties={tProperties}
+            reservations={tReservations}
           />
         );
       
@@ -293,7 +335,9 @@ export default function App() {
           <SettingsView 
             initialTab="connections" 
             brandSettings={brandSettings} 
-            onUpdateBrand={setBrandSettings} 
+            onUpdateBrand={setBrandSettings}
+            properties={tProperties}
+            onUpdateProperties={handleUpdateProperties}
           />
         );
       
@@ -354,6 +398,17 @@ export default function App() {
             selectedPropertyId={selectedPropertyId} 
             onSelectProperty={(id) => setSelectedPropertyId(id)}
             onClearFilter={() => setSelectedPropertyId(null)}
+            onReservationClick={(reservation) => {
+              // Find matching guest by name
+              const guest = tGuests.find(g => g.fullName === reservation.guestName);
+              if (guest) {
+                setSelectedGuestIdToView(guest.id);
+                setCurrentView('travelers');
+              } else {
+                // Fallback if no full profile exists yet
+                alert(`Dossier complet introuvable pour ${reservation.guestName}. Vérifiez s'il a été importé dans le CRM.`);
+              }
+            }}
           />
         );
       
@@ -377,6 +432,8 @@ export default function App() {
             initialTab="general" 
             brandSettings={brandSettings} 
             onUpdateBrand={setBrandSettings} 
+            properties={tProperties}
+            onUpdateProperties={handleUpdateProperties}
           />
         );
       
@@ -435,26 +492,21 @@ export default function App() {
             </div>
             <div className="flex items-center space-x-2">
               <img 
-                src={currentUser.avatar} 
+                src={currentUser.avatar || 'https://ui-avatars.com/api/?name=Guest'} 
                 alt="User" 
-                className="w-8 h-8 rounded-full" 
+                className="w-8 h-8 rounded-full bg-gray-200" 
               />
-              <select 
-                className="text-xs bg-gray-100 border-none rounded p-1"
-                value={currentUser.id}
-                onChange={(e) => handleRoleChange(e.target.value)}
-              >
-                {getTenantUsers().map((u) => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
-                ))}
-              </select>
+              <span className="text-sm font-medium text-gray-700 hidden md:block">{currentUser.name}</span>
             </div>
           </div>
         </header>
         <main className="p-4 md:p-6">
           <GuestPortal 
+            initialReservationId={selectedReservationIdForPortal}
             onCreateIncident={handleCreateIncident} 
-            incidents={getTenantIncidents()} 
+            incidents={getTenantIncidents()}
+            properties={getTenantProperties()}
+            reservations={getTenantReservations()} 
           />
         </main>
       </div>
@@ -468,25 +520,27 @@ export default function App() {
       
       {/* Sidebar */}
       <aside 
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 md:relative md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 bg-white border-r border-gray-200 transform transition-all duration-300 md:relative md:translate-x-0 flex flex-col ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        } ${sidebarCollapsed ? 'w-20' : 'w-64'}`}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="h-16 flex items-center px-6 border-b border-gray-100">
+          <div className={`h-16 flex items-center border-b border-gray-100 ${sidebarCollapsed ? 'justify-center' : 'px-6'}`}>
             <div className="flex items-center">
-              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold mr-2">
+              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shrink-0 transition-transform duration-300">
                 {brandSettings.agencyName.charAt(0)}
               </div>
-              <span className="text-lg font-bold text-gray-800 tracking-tight line-clamp-1">
-                {brandSettings.agencyName}
-              </span>
+              {!sidebarCollapsed && (
+                <span className="text-lg font-bold text-gray-800 tracking-tight line-clamp-1 ml-2 animate-fade-in">
+                  {brandSettings.agencyName}
+                </span>
+              )}
             </div>
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
+          <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto overflow-x-hidden no-scrollbar">
             {currentUser.role !== UserRole.LAUNDRY && currentUser.role !== UserRole.CLEANER && (
               <>
                 <SidebarItem 
@@ -494,73 +548,85 @@ export default function App() {
                   label="Tableau de bord" 
                   active={currentView === 'dashboard'} 
                   onClick={() => handleSidebarClick('dashboard')} 
+                  collapsed={sidebarCollapsed}
                 />
                 <SidebarItem 
                   icon={MessageSquare} 
                   label="Boîte de réception" 
                   active={currentView === 'inbox'} 
-                  onClick={() => handleSidebarClick('inbox')} 
+                  onClick={() => handleSidebarClick('inbox')}
+                  collapsed={sidebarCollapsed}
                 />
                 <SidebarItem 
                   icon={LifeBuoy} 
                   label="Support" 
                   badge={getTenantIncidents().filter((i) => i.status === 'NEW').length.toString()} 
                   active={currentView === 'incidents'} 
-                  onClick={() => handleSidebarClick('incidents')} 
+                  onClick={() => handleSidebarClick('incidents')}
+                  collapsed={sidebarCollapsed}
                 />
                 <SidebarItem 
                   icon={Calendar} 
                   label="Planning" 
                   active={currentView === 'calendar'} 
-                  onClick={() => handleSidebarClick('calendar')} 
+                  onClick={() => handleSidebarClick('calendar')}
+                  collapsed={sidebarCollapsed}
                 />
                 <SidebarItem 
                   icon={Home} 
                   label="Logements" 
                   active={currentView === 'properties' || currentView === 'property-edit'} 
-                  onClick={() => handleSidebarClick('properties')} 
+                  onClick={() => handleSidebarClick('properties')}
+                  collapsed={sidebarCollapsed}
                 />
                 <SidebarItem 
                   icon={Link} 
                   label="Connexions (API)" 
                   active={currentView === 'connections'} 
-                  onClick={() => handleSidebarClick('connections')} 
+                  onClick={() => handleSidebarClick('connections')}
+                  collapsed={sidebarCollapsed}
                 />
                 <SidebarItem 
                   icon={UserIcon} 
                   label="Voyageurs (CRM)" 
                   active={currentView === 'travelers'} 
-                  onClick={() => handleSidebarClick('travelers')} 
+                  onClick={() => handleSidebarClick('travelers')}
+                  collapsed={sidebarCollapsed}
                 />
                 <SidebarItem 
                   icon={Shirt} 
                   label="Blanchisserie" 
                   active={currentView === 'laundry'} 
-                  onClick={() => handleSidebarClick('laundry')} 
+                  onClick={() => handleSidebarClick('laundry')}
+                  collapsed={sidebarCollapsed}
                 />
                 <SidebarItem 
                   icon={Sparkles} 
                   label="Ménage" 
                   active={currentView === 'cleaning'} 
-                  onClick={() => handleSidebarClick('cleaning')} 
+                  onClick={() => handleSidebarClick('cleaning')}
+                  collapsed={sidebarCollapsed}
                 />
                 <SidebarItem 
                   icon={Users} 
                   label="Propriétaires" 
                   active={currentView === 'crm'} 
-                  onClick={() => handleSidebarClick('crm')} 
+                  onClick={() => handleSidebarClick('crm')}
+                  collapsed={sidebarCollapsed}
                 />
                 <SidebarItem 
                   icon={Eye} 
                   label="Aperçu Portail" 
                   active={currentView === 'guest'} 
-                  onClick={() => handleSidebarClick('guest')} 
+                  onClick={() => handleSidebarClick('guest')}
+                  collapsed={sidebarCollapsed}
                 />
                 <SidebarItem 
                   icon={Settings} 
                   label="Paramètres" 
                   active={currentView === 'settings'} 
-                  onClick={() => handleSidebarClick('settings')} 
+                  onClick={() => handleSidebarClick('settings')}
+                  collapsed={sidebarCollapsed}
                 />
               </>
             )}
@@ -570,13 +636,15 @@ export default function App() {
                   icon={Shirt} 
                   label="Missions & Stocks" 
                   active={currentView === 'laundry'} 
-                  onClick={() => handleSidebarClick('laundry')} 
+                  onClick={() => handleSidebarClick('laundry')}
+                  collapsed={sidebarCollapsed}
                 />
                 <SidebarItem 
                   icon={Calendar} 
                   label="Planning" 
                   active={currentView === 'calendar'} 
-                  onClick={() => handleSidebarClick('calendar')} 
+                  onClick={() => handleSidebarClick('calendar')}
+                  collapsed={sidebarCollapsed}
                 />
               </>
             )}
@@ -586,55 +654,82 @@ export default function App() {
                   icon={Sparkles} 
                   label="Mes Missions" 
                   active={currentView === 'cleaning'} 
-                  onClick={() => handleSidebarClick('cleaning')} 
+                  onClick={() => handleSidebarClick('cleaning')}
+                  collapsed={sidebarCollapsed}
                 />
                 <SidebarItem 
                   icon={Calendar} 
                   label="Planning" 
                   active={currentView === 'calendar'} 
-                  onClick={() => handleSidebarClick('calendar')} 
+                  onClick={() => handleSidebarClick('calendar')}
+                  collapsed={sidebarCollapsed}
                 />
               </>
             )}
           </nav>
+          
+          {/* Collapse Toggle Button (Desktop Only) */}
+          <div className="hidden md:flex justify-end px-4 py-2">
+            <button 
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="p-1.5 rounded-lg bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-indigo-600 transition-colors"
+              title={sidebarCollapsed ? "Agrandir le menu" : "Réduire le menu"}
+            >
+              {sidebarCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+            </button>
+          </div>
 
           {/* Profil utilisateur */}
-          <div className="p-4 border-t border-gray-100">
-            <div className="flex items-center space-x-3 mb-4">
+          <div className={`p-4 border-t border-gray-100 ${sidebarCollapsed ? 'flex flex-col items-center' : ''}`}>
+            <div className={`flex items-center ${sidebarCollapsed ? 'justify-center mb-0' : 'space-x-3 mb-4'}`}>
               <img 
                 src={currentUser.avatar} 
                 alt="User" 
-                className="w-10 h-10 rounded-full border border-gray-200" 
+                className="w-10 h-10 rounded-full border border-gray-200 object-cover shrink-0" 
               />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {currentUser.name}
-                </p>
-                <p className="text-xs text-gray-500 truncate">
-                  {currentUser.role.replace('_', ' ')}
-                </p>
-              </div>
+              {!sidebarCollapsed && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {currentUser.name}
+                  </p>
+                  <p className="text-xs text-gray-500 truncate">
+                    {currentUser.role.replace('_', ' ')}
+                  </p>
+                </div>
+              )}
             </div>
             
-            <select 
-              className="w-full text-sm bg-gray-50 border border-gray-200 rounded-lg p-2 mb-2 focus:ring-2 focus:ring-indigo-500 outline-none"
-              value={currentUser.id}
-              onChange={(e) => handleRoleChange(e.target.value)}
-            >
-              {getTenantUsers().map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name} ({u.role})
-                </option>
-              ))}
-            </select>
+            {!sidebarCollapsed ? (
+              <>
+                <select 
+                  className="w-full text-sm bg-gray-50 border border-gray-200 rounded-lg p-2 mb-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={currentUser.id}
+                  onChange={(e) => handleRoleChange(e.target.value)}
+                >
+                  {getTenantUsers().map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.role})
+                    </option>
+                  ))}
+                </select>
 
-            <button 
-              onClick={() => setCurrentTenant(null)}
-              className="w-full flex items-center justify-center text-xs text-red-500 hover:text-red-700 font-medium mt-2"
-            >
-              <LogOut className="w-3 h-3 mr-1" /> 
-              Changer d'organisation
-            </button>
+                <button 
+                  onClick={() => setCurrentTenant(null)}
+                  className="w-full flex items-center justify-center text-xs text-red-500 hover:text-red-700 font-medium mt-2"
+                >
+                  <LogOut className="w-3 h-3 mr-1" /> 
+                  Changer d'organisation
+                </button>
+              </>
+            ) : (
+               <button 
+                  onClick={() => setCurrentTenant(null)}
+                  className="mt-3 p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                  title="Changer d'organisation"
+                >
+                  <LogOut className="w-5 h-5" /> 
+                </button>
+            )}
           </div>
         </div>
       </aside>

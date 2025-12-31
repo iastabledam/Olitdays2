@@ -1,10 +1,39 @@
 
 import { GoogleGenAI } from "@google/genai";
 
-// Initialize Gemini Client
-// Note: In a production environment, API calls should ideally go through a backend proxy 
-// to secure the API Key, but for this frontend implementation we use it directly.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Initialize Gemini Client safely
+const getAiClient = () => {
+  const apiKey = process.env.API_KEY;
+  // Check if key is missing or is a placeholder
+  if (!apiKey || apiKey === 'YOUR_API_KEY' || apiKey.length < 10) return null;
+  return new GoogleGenAI({ apiKey });
+};
+
+// Mock responses for Demo Mode (when API fails or is missing)
+const getMockResponse = async (message: string): Promise<string> => {
+  // Simulate network delay
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  const lowerMsg = message.toLowerCase();
+
+  if (lowerMsg.includes('wifi') || lowerMsg.includes('internet')) {
+    return "✨ [Mode Démo] Le Wifi est 'HostFlow_Guest' et le mot de passe est 'Welcome2024'. Profitez-en !";
+  }
+  
+  if (lowerMsg.includes('code') || lowerMsg.includes('cle') || lowerMsg.includes('clé') || lowerMsg.includes('acces') || lowerMsg.includes('accès')) {
+    return "🔑 [Mode Démo] Le code de la boîte à clé est le 4589. Le boîtier se trouve juste à droite de la porte d'entrée.";
+  }
+
+  if (lowerMsg.includes('poubelle') || lowerMsg.includes('ordure')) {
+    return "🗑️ [Mode Démo] Le local poubelle est situé au rez-de-chaussée, première porte à gauche en sortant de l'ascenseur.";
+  }
+
+  if (lowerMsg.includes('parking') || lowerMsg.includes('garer')) {
+    return "🚗 [Mode Démo] Vous avez une place réservée au sous-sol, numéro 42. Le bip est sur le plan de travail.";
+  }
+
+  return "🤖 [Assistant Démo] Je suis votre concierge virtuel. En production, je serais connecté à l'IA Gemini pour répondre intelligemment. Ici, je simule une réponse car votre clé API n'a pas la facturation activée ou est manquante.";
+};
 
 export const chatWithConcierge = async (
   message: string,
@@ -12,17 +41,22 @@ export const chatWithConcierge = async (
   systemInstruction: string
 ): Promise<string> => {
   
+  const ai = getAiClient();
+
+  // IMMEDIATE FALLBACK if no client
+  if (!ai) {
+    console.warn("Gemini API Key missing. Using Demo Mode.");
+    return await getMockResponse(message);
+  }
+
   try {
     const model = 'gemini-3-flash-preview';
 
-    // Convert history to the format expected by the SDK
-    // The SDK expects 'user' and 'model' roles.
     const contents = history.map(msg => ({
       role: msg.role,
       parts: [{ text: msg.text }],
     }));
 
-    // Add the current user message to the conversation history for the API call
     contents.push({
       role: 'user',
       parts: [{ text: message }]
@@ -33,15 +67,17 @@ export const chatWithConcierge = async (
       contents: contents,
       config: {
         systemInstruction: systemInstruction,
-        temperature: 0.7, // Slightly creative but focused
-        // maxOutputTokens removed to comply with guidelines for thinking models
+        temperature: 0.7,
       }
     });
 
-    return response.text || "Désolé, je n'ai pas pu générer de réponse pour le moment.";
+    return response.text || "Je n'ai pas pu générer de réponse.";
 
-  } catch (error) {
-    console.error("Gemini API Error:", error);
-    return "⚠️ Service momentanément indisponible. Veuillez contacter votre hôte directement en cas d'urgence.";
+  } catch (error: any) {
+    // Catch Billing, Quota, or Network errors gracefully
+    console.error("Gemini API Error (likely Billing/Quota):", error);
+    
+    // Return friendly fallback instead of crashing or showing error text
+    return await getMockResponse(message);
   }
 };

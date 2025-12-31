@@ -99,7 +99,7 @@ export const GuestsView: React.FC<GuestsViewProps> = ({ initialGuestId, onNaviga
            <input 
              type="text" 
              placeholder="Rechercher un voyageur..." 
-             className="flex-1 outline-none text-sm p-2"
+             className="flex-1 outline-none text-sm p-2 bg-white text-gray-900"
              value={searchTerm}
              onChange={(e) => setSearchTerm(e.target.value)}
            />
@@ -289,7 +289,7 @@ export const GuestsView: React.FC<GuestsViewProps> = ({ initialGuestId, onNaviga
                     </button>
                  </div>
                  <textarea 
-                    className="w-full bg-white border border-gray-200 rounded-lg p-3 text-sm text-gray-700 focus:outline-none resize-none"
+                    className="w-full bg-white border border-gray-200 rounded-lg p-3 text-sm text-gray-900 focus:outline-none resize-none"
                     rows={3}
                     placeholder="Ajoutez une note privée..."
                     defaultValue={selectedGuest.notes}

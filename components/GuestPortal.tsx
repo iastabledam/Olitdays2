@@ -7,20 +7,20 @@ import {
   Wifi, MapPin, Coffee, Send, User, MessageCircle, Key, 
   Utensils, Star, Info, PlayCircle, X, CreditCard, Check, ChevronRight,
   Clock, Car, Ship, Plane, ShoppingCart, ChefHat, CheckCircle, ArrowLeft, Eye,
-  AlertTriangle, MessageSquare
+  AlertTriangle, MessageSquare, Video, Lock, ChevronLeft
 } from 'lucide-react';
 
 // --- MODAL COMPONENT ---
 const Modal = ({ title, children, onClose }: any) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-    <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl transform transition-all scale-100">
-      <div className="flex justify-between items-center p-4 border-b">
+    <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl transform transition-all scale-100 max-h-[90vh] flex flex-col">
+      <div className="flex justify-between items-center p-4 border-b shrink-0">
         <h3 className="text-lg font-bold text-gray-800">{title}</h3>
         <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full">
           <X className="w-5 h-5 text-gray-500" />
         </button>
       </div>
-      <div className="p-0">
+      <div className="p-0 overflow-y-auto flex-1">
         {children}
       </div>
     </div>
@@ -40,10 +40,14 @@ interface GuestPortalUIProps {
 const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, onExitPreview, onCreateIncident, onUpdateIncident, incidents }) => {
   // --- STATE ---
   const [chatOpen, setChatOpen] = useState(false);
-  const [activeModal, setActiveModal] = useState<'none' | 'wifi' | 'access' | 'guide' | 'payment' | 'incident' | 'incident_detail'>('none');
+  const [activeModal, setActiveModal] = useState<'none' | 'wifi' | 'access' | 'guide' | 'payment' | 'incident' | 'incident_detail' | 'stripe_payment'>('none');
   const [activeTab, setActiveTab] = useState<'flexibility' | 'transport' | 'restauration'>('flexibility');
   const [selectedService, setSelectedService] = useState<{name: string, price: string} | null>(null);
   
+  // Payment Processing State
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+
   // Incident Form State
   const [incidentDescription, setIncidentDescription] = useState('');
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
@@ -79,7 +83,7 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
           id: 'early-checkin',
           title: "Arrivée Anticipée",
           subtitle: "Accès dès 12h au lieu de 16h",
-          price: "49€",
+          price: "49.00€",
           desc: "Profitez de votre villa dès votre arrivée. Villa préparée et climatisée.",
           features: ["Villa prête dès 12h", "Climatisation activée", "Champagne offert"],
           badge: "DISPONIBLE",
@@ -92,7 +96,7 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
           id: 'late-checkout',
           title: "Départ Tardif",
           subtitle: "Villa jusqu'à 14h au lieu de 10h",
-          price: "39€",
+          price: "39.00€",
           desc: "Prolongez votre séjour et profitez d'une matinée relaxante.",
           features: ["Extension jusqu'à 14h", "Accès piscine maintenu"],
           badge: "DISPONIBLE",
@@ -109,7 +113,7 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
           id: 'boat',
           title: "Location Bateau",
           subtitle: "Avec Skipper • 6 places",
-          price: "290€/j",
+          price: "290.00€",
           desc: "Explorez les plus belles calanques de la Côte d'Azur.",
           features: ["Skipper inclus", "Carburant inclus", "Équipement snorkeling"],
           badge: "LIMITÉ",
@@ -122,7 +126,7 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
           id: 'airport',
           title: "Transfert Aéroport",
           subtitle: "Nice ↔ Villa • VIP",
-          price: "150€",
+          price: "150.00€",
           desc: "Transport privé en véhicule haut de gamme avec chauffeur.",
           features: ["Chauffeur costume", "Accueil personnalisé", "Suivi vol"],
           badge: "DISPONIBLE",
@@ -139,7 +143,7 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
           id: 'breakfast',
           title: "Petit-déjeuner",
           subtitle: "Livré chaque matin à 8h",
-          price: "25€/p",
+          price: "25.00€",
           desc: "Viennoiseries fraîches, jus pressé et fruits.",
           features: ["Produits frais", "Livraison discrète", "Jus pressé"],
           badge: "DISPONIBLE",
@@ -152,7 +156,7 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
           id: 'chef',
           title: "Chef à Domicile",
           subtitle: "Menu Gastronomique",
-          price: "350€",
+          price: "350.00€",
           desc: "Un chef étoilé cuisine dans votre villa un dîner d'exception.",
           features: ["Chef professionnel", "Service à table", "Nettoyage inclus"],
           badge: "SUR RÉSERVATION",
@@ -171,6 +175,21 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
     setActiveModal('payment');
   };
 
+  const handleStripePayment = () => {
+      setIsProcessingPayment(true);
+      // Simulate API call to Stripe
+      setTimeout(() => {
+          setIsProcessingPayment(false);
+          setPaymentSuccess(true);
+          // Auto close after success
+          setTimeout(() => {
+              setPaymentSuccess(false);
+              setActiveModal('none');
+              alert(`Paiement de ${selectedService?.price} confirmé ! Vous recevrez un email de confirmation.`);
+          }, 2000);
+      }, 2000);
+  };
+
   const handleSend = async () => {
     if (!input.trim()) return;
     
@@ -179,38 +198,24 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
     setInput('');
     setLoading(true);
 
-    // Build rich context for the AI
     const systemInstruction = `
       Tu es l'assistant concierge virtuel intelligent pour le logement "${property.name}".
       Ton but est d'aider le voyageur (${reservation.guestName}) durant son séjour de manière autonome.
       
-      Voici les informations DÉTAILLÉES sur la propriété (utilise-les pour répondre) :
+      Voici les informations DÉTAILLÉES sur la propriété :
       - Adresse : ${property.address}
-      - Type : ${property.propertyType || 'Logement entier'}
-      - Wifi Réseau (SSID) : "${property.wifiSsid || 'Non renseigné'}"
-      - Wifi Mot de passe : "${property.wifiPwd || 'Non renseigné'}"
-      - Code Boîte à Clé / Entrée : ${property.accessCode || 'Contacter l\'hôte'}
-      - Description du logement : ${property.description || 'Non renseignée'}
-      - Capacité : ${property.maxGuests} personnes
-      - Équipements disponibles : ${property.amenities?.join(', ') || 'Non spécifiés'}
+      - Wifi SSID : "${property.wifiSsid || 'Non renseigné'}" / Pass : "${property.wifiPwd || 'Non renseigné'}"
+      - Code Entrée : ${property.accessCode || 'Contacter l\'hôte'}
+      - Description : ${property.description || ''}
+      - Règles : ${property.houseRules || 'Pas de règles spécifiques'}
       
-      Règles de la maison :
-      - Heure d'arrivée (Check-in) : 15h00
-      - Heure de départ (Check-out) : 11h00
-      - Interdiction de fumer à l'intérieur.
-      - Pas de fêtes ni de nuisances sonores après 22h.
-      
-      Instructions pour l'IA :
-      1. Sois poli, chaleureux, serviable et concis.
-      2. Réponds directement aux questions sur le Wifi, l'accès, ou les équipements en utilisant les données ci-dessus.
-      3. Si on te demande un code ou une info qui est "Non renseigné" ou "Non défini", excuse-toi et suggère de contacter l'hôte via le bouton "Signaler".
-      4. Si le voyageur signale un problème grave (fuite, urgence), conseille-lui d'utiliser le bouton "Signaler un problème" de l'application ou d'appeler les urgences si nécessaire.
-      5. Tu peux suggérer des services premium (petit-déjeuner, ménage, transport) si le contexte s'y prête.
+      Instructions :
+      1. Sois poli, chaleureux et concis.
+      2. Réponds directement aux questions sur le logement.
+      3. Suggère les services premium si pertinent.
     `;
 
-    // Only send the last few messages to keep context window clean/cheap
     const history = messages.slice(-10).map(m => ({ role: m.role, text: m.text }));
-    
     const responseText = await chatWithConcierge(userMsg.text, history, systemInstruction);
     
     const botMsg: ChatMessage = { id: (Date.now() + 1).toString(), role: 'model', text: responseText, timestamp: Date.now() };
@@ -223,6 +228,7 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
       
       const newIncident: Incident = {
           id: `inc-${Date.now()}`,
+          tenantId: property.tenantId,
           title: 'Signalement Voyageur',
           description: incidentDescription,
           propertyId: property.id,
@@ -258,7 +264,7 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
       };
       
       onUpdateIncident(updated);
-      setSelectedIncident(updated); // Update local view
+      setSelectedIncident(updated);
       setIncidentReply('');
   };
 
@@ -297,7 +303,7 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
         </div>
       </div>
 
-      {/* --- MY REQUESTS / INCIDENTS SECTION (NEW) --- */}
+      {/* --- MY REQUESTS / INCIDENTS SECTION --- */}
       {myIncidents.length > 0 && (
           <div className="bg-white border border-indigo-100 rounded-2xl p-5 shadow-sm">
               <h3 className="font-bold text-indigo-900 mb-3 flex items-center">
@@ -366,14 +372,12 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
         </button>
       </div>
 
+      {/* --- SERVICES & CHAT SECTIONS --- */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         <div className="md:col-span-2 space-y-8">
-          
-          {/* --- RESERVATION INFO --- */}
+          {/* Reservation Info */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-            <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
-              <User className="w-5 h-5 mr-2 text-indigo-600"/> Mon Séjour
-            </h2>
+            <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center"><User className="w-5 h-5 mr-2 text-indigo-600"/> Mon Séjour</h2>
             <div className="flex justify-between items-center bg-gray-50 p-4 rounded-xl">
                <div>
                  <p className="text-xs text-gray-500 uppercase tracking-wide">Arrivée</p>
@@ -386,178 +390,148 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
                  <p className="font-bold text-gray-900">{new Date(reservation.endDate).toLocaleDateString('fr-FR')}</p>
                  <p className="text-sm text-gray-600">11:00</p>
                </div>
-               <div className="hidden sm:block">
-                 <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">CONFIRMÉ</span>
-               </div>
             </div>
           </div>
 
-          {/* --- PREMIUM SERVICES SECTION (OLITDAYS STYLE) --- */}
-          <div id="services" className="scroll-mt-6">
-            <div className="flex items-center justify-between mb-4">
-               <h2 className="text-xl font-bold text-gray-800 flex items-center">
-                <Star className="w-6 h-6 mr-2 text-[#FF6B6B]" fill="#FF6B6B" /> 
-                Services Premium
+          {/* Premium Services (Restored) */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="p-6 pb-0">
+              <h2 className="text-lg font-bold text-gray-800 flex items-center">
+                <Star className="w-5 h-5 mr-2 text-amber-500" /> Services Premium
               </h2>
+              <p className="text-sm text-gray-500 mt-1">Améliorez votre séjour avec nos services exclusifs.</p>
             </div>
             
-            {/* TABS */}
-            <div className="bg-white rounded-xl p-2 shadow-sm border border-gray-100 mb-6 flex gap-2 overflow-x-auto">
-              {(['flexibility', 'transport', 'restauration'] as const).map(tab => (
-                <button 
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`flex-1 flex items-center justify-center px-4 py-2.5 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${
-                    activeTab === tab 
-                      ? 'bg-[#FF6B6B] text-white shadow-md' 
-                      : 'bg-transparent text-gray-500 hover:bg-gray-50'
-                  }`}
-                >
-                  {tab === 'flexibility' && <Clock className="w-4 h-4 mr-2" />}
-                  {tab === 'transport' && <Car className="w-4 h-4 mr-2" />}
-                  {tab === 'restauration' && <Utensils className="w-4 h-4 mr-2" />}
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                </button>
-              ))}
+            {/* Tabs */}
+            <div className="flex border-b border-gray-100 mt-4 px-6 overflow-x-auto gap-4 scrollbar-hide">
+              <button 
+                onClick={() => setActiveTab('flexibility')}
+                className={`pb-3 text-sm font-medium transition whitespace-nowrap ${activeTab === 'flexibility' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Flexibilité
+              </button>
+              <button 
+                onClick={() => setActiveTab('transport')}
+                className={`pb-3 text-sm font-medium transition whitespace-nowrap ${activeTab === 'transport' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Transports
+              </button>
+              <button 
+                onClick={() => setActiveTab('restauration')}
+                className={`pb-3 text-sm font-medium transition whitespace-nowrap ${activeTab === 'restauration' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Restauration
+              </button>
             </div>
 
-            {/* SERVICE CARDS */}
-            <div className="space-y-4">
-              {currentCategory.items.map((item: any) => (
-                <div key={item.id} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden group hover:border-[#FF6B6B]/30 transition-all">
-                   {/* Tags */}
-                   {item.tag && (
-                      <div className={`absolute top-0 left-0 px-3 py-1 rounded-br-lg text-[10px] font-bold tracking-wider text-white uppercase ${item.tagColor}`}>
-                        {item.tag}
-                      </div>
-                    )}
-                    <div className={`absolute top-4 right-4 px-2 py-0.5 rounded text-[10px] font-bold uppercase ${item.badgeColor}`}>
-                      {item.badge}
+            {/* List */}
+            <div className="p-6 grid gap-4">
+               {currentCategory.items.map(item => (
+                 <div key={item.id} className="border border-gray-200 rounded-xl p-4 hover:border-indigo-200 transition group bg-white">
+                    <div className="flex justify-between items-start mb-2">
+                       <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${item.badgeColor}`}>
+                            {item.badge}
+                          </span>
+                          {item.tag && (
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold text-white uppercase ${item.tagColor}`}>
+                              {item.tag}
+                            </span>
+                          )}
+                       </div>
+                       <div className="flex items-center text-indigo-600 font-bold bg-indigo-50 px-2 py-1 rounded-lg">
+                          {item.price}
+                       </div>
+                    </div>
+                    
+                    <div className="flex items-start gap-4">
+                       <div className="bg-gray-100 p-3 rounded-lg text-gray-600 group-hover:bg-indigo-600 group-hover:text-white transition duration-300">
+                          <item.icon className="w-6 h-6" />
+                       </div>
+                       <div className="flex-1">
+                          <h3 className="font-bold text-gray-900">{item.title}</h3>
+                          <p className="text-sm font-medium text-gray-500">{item.subtitle}</p>
+                          <p className="text-xs text-gray-400 mt-2 line-clamp-2">{item.desc}</p>
+                          
+                          {/* Features */}
+                          <div className="flex flex-wrap gap-2 mt-3">
+                             {item.features.map((feat, idx) => (
+                               <span key={idx} className="text-[10px] bg-gray-50 border border-gray-100 px-2 py-1 rounded text-gray-600 flex items-center">
+                                 <Check className="w-3 h-3 mr-1 text-green-500" /> {feat}
+                               </span>
+                             ))}
+                          </div>
+                       </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-5 mt-4">
-                      {/* Icon */}
-                      <div className="flex-shrink-0">
-                         <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center text-[#FF6B6B] group-hover:bg-[#FFF0F0] transition-colors">
-                            <item.icon className="w-8 h-8" />
-                         </div>
-                      </div>
-
-                      {/* Content */}
-                      <div className="flex-1">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h3 className="font-bold text-gray-900 text-lg">{item.title}</h3>
-                            <p className="text-sm text-gray-500">{item.subtitle}</p>
-                          </div>
-                          <div className="text-right">
-                             <div className="text-[#FF6B6B] font-bold text-lg">{item.price}</div>
-                          </div>
-                        </div>
-
-                        <p className="text-gray-600 text-sm mt-3 mb-3 leading-relaxed">{item.desc}</p>
-
-                        <div className="space-y-1 mb-4">
-                          {item.features.map((feat: string, i: number) => (
-                            <div key={i} className="flex items-center text-xs text-gray-500">
-                              <CheckCircle className="w-3 h-3 text-green-500 mr-2" />
-                              {feat}
-                            </div>
-                          ))}
-                        </div>
-
-                        <button 
-                          onClick={() => handleBookService(item.title, item.price)}
-                          className="w-full sm:w-auto bg-[#FF6B6B] hover:bg-[#ff5252] text-white px-6 py-2 rounded-xl font-bold text-sm shadow-sm transition-transform active:scale-95"
-                        >
-                          Réserver
-                        </button>
-                      </div>
-                    </div>
-                </div>
-              ))}
+                    <button 
+                      onClick={() => handleBookService(item.title, item.price)}
+                      className="w-full mt-4 bg-gray-900 text-white py-2 rounded-lg font-medium text-sm hover:bg-indigo-600 transition shadow-sm"
+                    >
+                      Réserver
+                    </button>
+                 </div>
+               ))}
             </div>
           </div>
         </div>
-
-        {/* --- CHAT WIDGET --- */}
+        
+        {/* Chat Widget (Restored) */}
         <div className="relative">
-           <div className={`
-             fixed bottom-0 right-0 left-0 top-0 z-40 md:z-0 md:static md:block md:h-[600px] md:sticky md:top-24
-             ${chatOpen ? 'block' : 'hidden md:block'}
-           `}>
-             <div className="bg-white md:rounded-2xl shadow-xl border border-gray-100 h-full flex flex-col overflow-hidden">
-               {/* Mobile Header to close */}
-               <div className="md:hidden bg-indigo-600 p-4 text-white flex justify-between items-center">
-                 <span className="font-bold">Conciergerie</span>
-                 <button onClick={() => setChatOpen(false)}><X className="w-6 h-6"/></button>
-               </div>
-               
-               {/* Desktop Header */}
-               <div className="hidden md:flex bg-gradient-to-r from-indigo-600 to-purple-600 p-4 text-white justify-between items-center">
-                 <div className="flex items-center">
-                   <div className="relative">
-                     <div className="w-2 h-2 bg-green-400 rounded-full absolute bottom-0 right-0 border border-indigo-600"></div>
-                     <MessageCircle className="w-5 h-5 mr-2 opacity-80" />
-                   </div>
-                   <span className="font-bold text-sm">Concierge IA</span>
-                 </div>
-               </div>
-               
-               <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+           <div className="sticky top-24 bg-white rounded-2xl shadow-xl border border-indigo-100 overflow-hidden flex flex-col h-[600px]">
+              <div className="bg-indigo-600 p-4 text-white">
+                 <h3 className="font-bold flex items-center">
+                    <MessageCircle className="w-5 h-5 mr-2" /> Concierge IA
+                 </h3>
+                 <p className="text-xs opacity-80 mt-1">Disponible 24/7 pour vous aider</p>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
                  {messages.map(msg => (
                    <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                     <div className={`max-w-[85%] p-3 rounded-2xl text-sm leading-relaxed shadow-sm ${
-                       msg.role === 'user' 
-                         ? 'bg-indigo-600 text-white rounded-br-none' 
-                         : 'bg-white text-gray-800 border border-gray-200 rounded-bl-none'
-                     }`}>
-                       {msg.text}
-                     </div>
+                      <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${
+                        msg.role === 'user' 
+                        ? 'bg-indigo-600 text-white rounded-br-none' 
+                        : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-none'
+                      }`}>
+                        {msg.text}
+                      </div>
                    </div>
                  ))}
                  {loading && (
-                    <div className="flex justify-start">
-                      <div className="bg-gray-200 px-3 py-1.5 rounded-full text-xs text-gray-500 animate-pulse">
-                        L'assistant écrit...
+                   <div className="flex justify-start">
+                      <div className="bg-white p-3 rounded-2xl rounded-bl-none shadow-sm border border-gray-100">
+                         <div className="flex space-x-1">
+                            <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce"></div>
+                            <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce delay-100"></div>
+                            <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce delay-200"></div>
+                         </div>
                       </div>
-                    </div>
+                   </div>
                  )}
                  <div ref={messagesEndRef} />
-               </div>
+              </div>
 
-               <div className="p-3 bg-white border-t">
-                 <div className="flex gap-2">
-                   <input 
-                     type="text" 
-                     value={input}
-                     onChange={(e) => setInput(e.target.value)}
-                     onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                     placeholder="Posez une question sur le logement..."
-                     className="flex-1 bg-gray-100 border-none rounded-full px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                   />
-                   <button 
-                     onClick={handleSend}
-                     disabled={loading}
-                     className="bg-indigo-600 text-white p-3 rounded-full hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-sm"
-                   >
-                     <Send className="w-4 h-4" />
-                   </button>
+              <div className="p-3 bg-white border-t border-gray-100">
+                 <div className="relative">
+                    <input 
+                      type="text" 
+                      className="w-full border border-gray-300 rounded-full pl-4 pr-10 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      placeholder="Posez une question..."
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                    />
+                    <button 
+                      onClick={handleSend}
+                      className="absolute right-1.5 top-1.5 bg-indigo-600 text-white p-1.5 rounded-full hover:bg-indigo-700 transition disabled:opacity-50"
+                      disabled={!input.trim() || loading}
+                    >
+                       <Send className="w-4 h-4" />
+                    </button>
                  </div>
-               </div>
-             </div>
+              </div>
            </div>
-
-           {/* Mobile Chat Bubble Button */}
-           {!chatOpen && (
-             <button 
-               onClick={() => setChatOpen(true)}
-               className="md:hidden fixed bottom-6 right-6 bg-indigo-600 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center hover:bg-indigo-700 transition transform hover:scale-110 z-40"
-             >
-               <MessageCircle className="w-7 h-7" />
-               <span className="absolute top-0 right-0 w-4 h-4 bg-red-500 rounded-full border-2 border-white"></span>
-             </button>
-           )}
         </div>
       </div>
 
@@ -576,33 +550,232 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
                <p className="text-gray-500 text-sm">Mot de passe</p>
                <p className="text-xl font-bold text-gray-900 bg-gray-50 p-2 rounded-lg select-all">{property.wifiPwd || 'Non configuré'}</p>
              </div>
-             <p className="text-xs text-gray-400">Cliquez sur le texte pour copier</p>
           </div>
         </Modal>
       )}
 
       {activeModal === 'access' && (
         <Modal title="Instructions d'Accès" onClose={() => setActiveModal('none')}>
-           <div className="p-6 space-y-4">
-              <div className="flex items-center p-4 bg-amber-50 rounded-lg border border-amber-100">
-                 <Key className="w-6 h-6 text-amber-600 mr-3" />
-                 <div>
-                    <h4 className="font-bold text-amber-800">Code Boîte à Clé</h4>
-                    <p className="text-2xl font-mono font-bold text-amber-900 tracking-widest">{property.accessCode || '----'}</p>
-                 </div>
-              </div>
-              <div className="space-y-2">
-                 <h4 className="font-bold text-gray-800">Procédure d'arrivée</h4>
-                 <p className="text-sm text-gray-600 leading-relaxed">
-                   1. Composez le code sur le boîtier situé à droite de la porte.<br/>
-                   2. Abaissez le loquet noir pour ouvrir.<br/>
-                   3. Prenez les clés et refermez le boîtier.
-                 </p>
+           <div className="p-0">
+              
+              {/* Video Player Section */}
+              {property.accessVideoUrl ? (
+                  <div className="w-full bg-black aspect-video relative">
+                      <video 
+                        key={property.accessVideoUrl}
+                        controls 
+                        className="w-full h-full"
+                        autoPlay={false}
+                        playsInline
+                        preload="metadata"
+                      >
+                          <source src={property.accessVideoUrl} type="video/mp4" />
+                          <source src={property.accessVideoUrl} type="video/webm" />
+                          <source src={property.accessVideoUrl} type="video/quicktime" />
+                          Votre navigateur ne supporte pas la lecture de vidéos.
+                      </video>
+                  </div>
+              ) : (
+                  <div className="w-full bg-gray-100 aspect-video flex items-center justify-center text-gray-400">
+                      <p className="text-sm">Aucune vidéo disponible</p>
+                  </div>
+              )}
+
+              <div className="p-6 space-y-4">
+                  {property.accessVideoUrl && (
+                      <div className="flex items-center text-sm text-indigo-600 bg-indigo-50 p-3 rounded-lg border border-indigo-100 mb-2">
+                          <PlayCircle className="w-5 h-5 mr-2" />
+                          <span className="font-medium">Regardez la vidéo ci-dessus pour vous guider.</span>
+                      </div>
+                  )}
+
+                  <div className="flex items-center p-4 bg-amber-50 rounded-lg border border-amber-100">
+                     <Key className="w-6 h-6 text-amber-600 mr-3 shrink-0" />
+                     <div>
+                        <h4 className="font-bold text-amber-800">Code Boîte à Clé</h4>
+                        <p className="text-2xl font-mono font-bold text-amber-900 tracking-widest">{property.accessCode || '----'}</p>
+                     </div>
+                  </div>
+                  <div className="space-y-2">
+                     <h4 className="font-bold text-gray-800">Procédure d'arrivée</h4>
+                     <p className="text-sm text-gray-600 leading-relaxed">
+                       1. Composez le code sur le boîtier situé à droite de la porte.<br/>
+                       2. Abaissez le loquet noir pour ouvrir.<br/>
+                       3. Prenez les clés et refermez le boîtier.
+                     </p>
+                  </div>
               </div>
            </div>
         </Modal>
       )}
 
+      {activeModal === 'payment' && selectedService && (
+        <Modal title="Réservation de service" onClose={() => setActiveModal('none')}>
+           <div className="p-6">
+              <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 mb-6">
+                 <h4 className="font-bold text-indigo-900">{selectedService.name}</h4>
+                 <p className="text-indigo-700">{selectedService.price}</p>
+              </div>
+              
+              <div className="space-y-4 mb-6">
+                 <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date souhaitée</label>
+                    <input type="date" className="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-indigo-500" />
+                 </div>
+                 <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Commentaire</label>
+                    <textarea className="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-indigo-500" rows={3} placeholder="Précisions..." />
+                 </div>
+              </div>
+
+              <button 
+                onClick={() => {
+                    // Switch to Stripe Mock View
+                    setActiveModal('stripe_payment');
+                }}
+                className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 shadow-md"
+              >
+                 Confirmer la demande
+              </button>
+           </div>
+        </Modal>
+      )}
+
+      {/* --- MOCK STRIPE PAYMENT MODAL --- */}
+      {activeModal === 'stripe_payment' && selectedService && (
+          <div className="fixed inset-0 z-[100] bg-gray-100 flex animate-in slide-in-from-bottom-10 duration-300">
+              
+              {/* LEFT: Summary */}
+              <div className="w-1/2 p-12 hidden md:flex flex-col justify-between border-r border-gray-200 bg-white relative overflow-hidden">
+                  <div className="z-10 relative">
+                      <button onClick={() => setActiveModal('payment')} className="flex items-center text-gray-500 hover:text-gray-900 mb-8 transition">
+                          <ChevronLeft className="w-5 h-5 mr-1" /> Retour
+                      </button>
+                      
+                      <p className="text-gray-500 text-sm font-medium uppercase tracking-wider mb-2">Payer {property.name}</p>
+                      <h2 className="text-4xl font-bold text-gray-900 mb-4">{selectedService.price}</h2>
+                      
+                      <div className="space-y-4 mt-8">
+                          <div className="flex justify-between items-center py-3 border-b border-gray-100">
+                              <span className="font-medium text-gray-700">{selectedService.name}</span>
+                              <span className="font-bold text-gray-900">{selectedService.price}</span>
+                          </div>
+                          <div className="flex justify-between items-center py-3 border-b border-gray-100">
+                              <span className="text-gray-500">TVA (20%)</span>
+                              <span className="text-gray-500">Inclus</span>
+                          </div>
+                          <div className="flex justify-between items-center py-3">
+                              <span className="font-bold text-gray-900">Total à payer</span>
+                              <span className="font-bold text-gray-900">{selectedService.price}</span>
+                          </div>
+                      </div>
+                  </div>
+                  
+                  <div className="z-10 mt-auto">
+                      <div className="flex items-center gap-2 text-xs text-gray-400">
+                          <span>Propulsé par</span>
+                          <span className="font-bold text-gray-600 text-sm">stripe</span>
+                      </div>
+                  </div>
+
+                  {/* Decorative Circle */}
+                  <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-indigo-50 rounded-full z-0"></div>
+              </div>
+
+              {/* RIGHT: Payment Form */}
+              <div className="flex-1 p-6 md:p-12 flex flex-col justify-center bg-[#f7f9fc]">
+                  <div className="max-w-md w-full mx-auto bg-white p-8 rounded-2xl shadow-xl border border-gray-100 relative">
+                      {paymentSuccess ? (
+                          <div className="flex flex-col items-center justify-center py-10 animate-in zoom-in duration-300">
+                              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                                  <Check className="w-10 h-10 text-green-600" />
+                              </div>
+                              <h2 className="text-2xl font-bold text-gray-800 mb-2">Paiement réussi !</h2>
+                              <p className="text-gray-500 text-center">Merci de votre confiance. Vous allez être redirigé...</p>
+                          </div>
+                      ) : (
+                          <>
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-xl font-bold text-gray-800">Payer par carte</h3>
+                                <div className="flex gap-2">
+                                    <div className="w-8 h-5 bg-gray-200 rounded"></div>
+                                    <div className="w-8 h-5 bg-gray-200 rounded"></div>
+                                </div>
+                            </div>
+
+                            <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); handleStripePayment(); }}>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email</label>
+                                    <input 
+                                        type="email" 
+                                        defaultValue={reservation.guestName.toLowerCase().replace(' ', '.') + "@email.com"}
+                                        className="w-full border border-gray-300 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-[#635BFF] focus:border-transparent transition bg-white text-gray-900"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Informations de carte</label>
+                                    <div className="border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-[#635BFF] transition bg-white">
+                                        <div className="flex items-center px-4 py-3 border-b border-gray-200">
+                                            <CreditCard className="w-5 h-5 text-gray-400 mr-3" />
+                                            <input 
+                                                type="text" 
+                                                placeholder="0000 0000 0000 0000" 
+                                                className="flex-1 outline-none font-mono text-gray-900 bg-white"
+                                            />
+                                        </div>
+                                        <div className="flex divide-x divide-gray-200">
+                                            <input 
+                                                type="text" 
+                                                placeholder="MM / AA" 
+                                                className="w-1/2 px-4 py-3 outline-none font-mono text-center text-gray-900 bg-white"
+                                            />
+                                            <input 
+                                                type="text" 
+                                                placeholder="CVC" 
+                                                className="w-1/2 px-4 py-3 outline-none font-mono text-center text-gray-900 bg-white"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nom sur la carte</label>
+                                    <input 
+                                        type="text" 
+                                        defaultValue={reservation.guestName}
+                                        className="w-full border border-gray-300 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-[#635BFF] focus:border-transparent transition bg-white text-gray-900"
+                                    />
+                                </div>
+
+                                <button 
+                                    type="submit"
+                                    disabled={isProcessingPayment}
+                                    className="w-full bg-[#635BFF] hover:bg-[#5851E1] text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5 mt-4 flex justify-center items-center"
+                                >
+                                    {isProcessingPayment ? (
+                                        <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                    ) : (
+                                        <>
+                                            <Lock className="w-4 h-4 mr-2" /> Payer {selectedService.price}
+                                        </>
+                                    )}
+                                </button>
+                            </form>
+                            
+                            <p className="text-center text-xs text-gray-400 mt-6 flex items-center justify-center">
+                                <Lock className="w-3 h-3 mr-1" /> Paiement sécurisé via Stripe
+                            </p>
+                          </>
+                      )}
+                  </div>
+                  
+                  {/* Mobile Back Button */}
+                  <button onClick={() => setActiveModal('payment')} className="md:hidden mt-6 text-gray-500 underline text-sm text-center">
+                      Annuler et retour
+                  </button>
+              </div>
+          </div>
+      )}
+      
       {activeModal === 'guide' && (
         <Modal title="Guide de la Maison" onClose={() => setActiveModal('none')}>
            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
@@ -612,14 +785,19 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
                     <li>Arrivée après 15h, Départ avant 11h.</li>
                     <li>Non fumeur à l'intérieur.</li>
                     <li>Pas de fêtes ni de soirées bruyantes après 22h.</li>
-                    <li>Les animaux ne sont pas autorisés.</li>
                  </ul>
               </div>
+              
               <div className="space-y-2">
-                 <h4 className="font-bold text-gray-800 flex items-center"><Utensils className="w-4 h-4 mr-2 text-indigo-600"/> Ordures Ménagères</h4>
-                 <p className="text-sm text-gray-600">
-                    Les poubelles sont situées à l'extérieur, sur le côté gauche de la maison. Merci de trier le verre et le carton.
-                 </p>
+                 <h4 className="font-bold text-gray-800 flex items-center"><Utensils className="w-4 h-4 mr-2 text-indigo-600"/> Appareils</h4>
+                 <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 text-sm">
+                    <p className="font-medium text-gray-900 mb-1">Machine à café</p>
+                    <p className="text-gray-600">Remplir le réservoir d'eau, insérer une capsule, fermer le levier et appuyer sur le bouton tasse.</p>
+                 </div>
+                 <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 text-sm">
+                    <p className="font-medium text-gray-900 mb-1">Lave-vaisselle</p>
+                    <p className="text-gray-600">Utiliser une tablette tout-en-un. Programme ECO recommandé.</p>
+                 </div>
               </div>
            </div>
         </Modal>
@@ -628,70 +806,65 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
       {activeModal === 'incident' && (
           <Modal title="Signaler un problème" onClose={() => setActiveModal('none')}>
               <div className="p-6 space-y-4">
-                  <p className="text-sm text-gray-600">
-                      Une fuite ? Un appareil en panne ? Décrivez le problème ci-dessous pour que notre équipe intervienne rapidement.
-                  </p>
                   <textarea 
-                      className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none resize-none h-32"
+                      className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none resize-none h-32 bg-white text-gray-900"
                       placeholder="Ex: La climatisation du salon ne fonctionne plus..."
                       value={incidentDescription}
                       onChange={(e) => setIncidentDescription(e.target.value)}
                       autoFocus
                   />
-                  <button 
-                      onClick={handleSubmitIncident}
-                      disabled={!incidentDescription.trim()}
-                      className="w-full bg-red-600 text-white py-3 rounded-xl font-bold hover:bg-red-700 shadow-md flex items-center justify-center"
-                  >
+                  <button onClick={handleSubmitIncident} className="w-full bg-red-600 text-white py-3 rounded-xl font-bold hover:bg-red-700 shadow-md flex items-center justify-center">
                       <AlertTriangle className="w-4 h-4 mr-2" /> Envoyer le signalement
                   </button>
               </div>
           </Modal>
       )}
 
-      {/* INCIDENT DETAIL MODAL (Chat with host about issue) */}
+      {/* Incident Detail Modal */}
       {activeModal === 'incident_detail' && selectedIncident && (
-          <Modal 
-              title={
-                  <div className="flex flex-col">
-                      <span>{selectedIncident.title}</span>
-                      <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded w-fit mt-1 ${
-                          selectedIncident.status === 'NEW' ? 'bg-indigo-100 text-indigo-700' :
-                          selectedIncident.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
-                      }`}>
-                          {selectedIncident.status === 'NEW' ? 'Reçu' : selectedIncident.status === 'IN_PROGRESS' ? 'Pris en charge' : 'Résolu'}
-                      </span>
+          <Modal title="Détail de la demande" onClose={() => setActiveModal('none')}>
+              <div className="flex flex-col h-[500px]">
+                  <div className="p-4 bg-gray-50 border-b border-gray-100">
+                      <div className="flex justify-between items-start mb-2">
+                          <h4 className="font-bold text-gray-900">{selectedIncident.title}</h4>
+                          <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                              selectedIncident.status === 'NEW' ? 'bg-indigo-100 text-indigo-700' :
+                              selectedIncident.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+                          }`}>
+                              {selectedIncident.status === 'NEW' ? 'Envoyé' : selectedIncident.status === 'IN_PROGRESS' ? 'En cours' : 'Résolu'}
+                          </span>
+                      </div>
+                      <p className="text-xs text-gray-500">Envoyé le {new Date(selectedIncident.reportedAt).toLocaleDateString()}</p>
                   </div>
-              } 
-              onClose={() => setActiveModal('none')}
-          >
-              <div className="flex flex-col h-[400px]">
-                  <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+                  
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-white">
                       {/* Original description */}
                       <div className="flex justify-end">
-                          <div className="max-w-[85%] bg-indigo-600 text-white p-3 rounded-2xl rounded-tr-none text-sm">
+                          <div className="bg-indigo-600 text-white p-3 rounded-2xl rounded-tr-none text-sm max-w-[85%]">
                               {selectedIncident.description}
                           </div>
                       </div>
                       
-                      {/* Messages */}
+                      {/* Messages loop */}
                       {(selectedIncident.messages || []).map((msg, idx) => (
                           <div key={idx} className={`flex ${msg.author === reservation.guestName ? 'justify-end' : 'justify-start'}`}>
-                              <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${
+                              <div className={`p-3 rounded-2xl text-sm max-w-[85%] ${
                                   msg.author === reservation.guestName 
                                   ? 'bg-indigo-600 text-white rounded-tr-none' 
-                                  : 'bg-white text-gray-800 border border-gray-200 rounded-tl-none'
+                                  : 'bg-gray-100 text-gray-800 rounded-tl-none'
                               }`}>
+                                  <p className="text-xs opacity-70 mb-1 font-bold">{msg.author === reservation.guestName ? 'Moi' : 'Support'}</p>
                                   {msg.text}
                               </div>
                           </div>
                       ))}
                   </div>
-                  <div className="p-4 bg-white border-t border-gray-100">
-                      <div className="flex gap-2">
+
+                  <div className="p-3 border-t border-gray-100 bg-white">
+                      <div className="relative">
                           <input 
                               type="text" 
-                              className="flex-1 border border-gray-300 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              className="w-full border border-gray-300 rounded-full pl-4 pr-10 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
                               placeholder="Répondre..."
                               value={incidentReply}
                               onChange={(e) => setIncidentReply(e.target.value)}
@@ -699,7 +872,8 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
                           />
                           <button 
                               onClick={handleReplyToIncident}
-                              className="p-2 bg-indigo-600 text-white rounded-full hover:bg-indigo-700"
+                              disabled={!incidentReply.trim()}
+                              className="absolute right-1 top-1 bg-indigo-600 text-white p-1.5 rounded-full hover:bg-indigo-700 disabled:opacity-50"
                           >
                               <Send className="w-4 h-4" />
                           </button>
@@ -707,29 +881,6 @@ const GuestPortalUI: React.FC<GuestPortalUIProps> = ({ reservation, property, on
                   </div>
               </div>
           </Modal>
-      )}
-
-      {activeModal === 'payment' && selectedService && (
-        <Modal title="Confirmation" onClose={() => setActiveModal('none')}>
-           <div className="p-6 text-center space-y-6">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto text-green-600 animate-in zoom-in duration-300">
-                 <CheckCircle className="w-8 h-8" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-gray-800">Demande envoyée !</h3>
-                <p className="text-gray-500 mt-2">
-                  Vous avez demandé : <span className="font-bold text-gray-800">{selectedService.name}</span> ({selectedService.price}).
-                  <br/>Votre concierge reviendra vers vous pour confirmer.
-                </p>
-              </div>
-              <button 
-                onClick={() => setActiveModal('none')}
-                className="w-full bg-gray-900 text-white py-3 rounded-xl font-bold hover:bg-gray-800 transition"
-              >
-                Retour à l'accueil
-              </button>
-           </div>
-        </Modal>
       )}
 
     </div>
@@ -740,23 +891,79 @@ export const GuestPortal: React.FC<{
   initialReservationId?: string | null;
   onCreateIncident?: (incident: Incident) => void;
   incidents?: Incident[];
-}> = ({ initialReservationId, onCreateIncident, incidents }) => {
-  const reservation = initialReservationId 
-    ? MOCK_RESERVATIONS.find(r => r.id === initialReservationId)
-    : MOCK_RESERVATIONS[0]; 
+  properties: Property[];
+  reservations: Reservation[];
+}> = ({ initialReservationId, onCreateIncident, incidents, properties, reservations }) => {
+  const [reservationId, setReservationId] = useState<string | null>(initialReservationId || null);
+  const [loginCode, setLoginCode] = useState('');
+  const [error, setError] = useState('');
 
-  if (!reservation) return <div className="p-8 text-center text-gray-500">Aucune réservation trouvée.</div>;
+  useEffect(() => {
+    if (initialReservationId) {
+        setReservationId(initialReservationId);
+    }
+  }, [initialReservationId]);
 
-  const property = MOCK_PROPERTIES.find(p => p.id === reservation.propertyId);
-  
-  if (!property) return <div className="p-8 text-center text-gray-500">Propriété introuvable.</div>;
+  const handleLogin = () => {
+      const res = reservations.find(r => r.id === loginCode || r.guestName.toLowerCase() === loginCode.toLowerCase());
+      if (res) {
+          setReservationId(res.id);
+          setError('');
+      } else {
+          setError('Réservation introuvable (Essayer r1, r5...).');
+      }
+  };
+
+  if (reservationId) {
+      const reservation = reservations.find(r => r.id === reservationId);
+      const property = properties.find(p => p.id === reservation?.propertyId);
+
+      if (reservation && property) {
+          return (
+              <GuestPortalUI 
+                  reservation={reservation} 
+                  property={property} 
+                  incidents={incidents}
+                  onCreateIncident={onCreateIncident}
+                  onExitPreview={() => setReservationId(null)}
+              />
+          );
+      }
+  }
 
   return (
-    <GuestPortalUI 
-       reservation={reservation} 
-       property={property} 
-       onCreateIncident={onCreateIncident}
-       incidents={incidents}
-    />
+      <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4 font-sans">
+          <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
+              <div className="w-16 h-16 bg-indigo-600 rounded-xl flex items-center justify-center mx-auto mb-6 shadow-lg text-white">
+                  <User className="w-8 h-8" />
+              </div>
+              <h1 className="text-2xl font-bold text-gray-800 mb-2">Bienvenue</h1>
+              <p className="text-gray-500 mb-8">Accédez à votre espace voyageur pour gérer votre séjour.</p>
+              
+              <div className="space-y-4">
+                  <div className="text-left">
+                      <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-1 block">Référence Réservation</label>
+                      <input 
+                          type="text" 
+                          placeholder="Ex: r1" 
+                          className="w-full border border-gray-300 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 transition text-gray-900"
+                          value={loginCode}
+                          onChange={(e) => setLoginCode(e.target.value)}
+                      />
+                  </div>
+                  {error && <p className="text-red-500 text-sm">{error}</p>}
+                  <button 
+                      onClick={handleLogin}
+                      className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl hover:bg-indigo-700 transition shadow-md"
+                  >
+                      Accéder au séjour
+                  </button>
+              </div>
+              
+              <div className="mt-8 text-xs text-gray-400">
+                  Propulsé par HostFlow
+              </div>
+          </div>
+      </div>
   );
 };

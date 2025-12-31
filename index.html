@@ -3,42 +3,43 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>HostFlow Pro - Gestion Locative</title>
+    <title>OLITDAYS - Gestion Locative</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-      body {
-        font-family: 'Inter', sans-serif;
-        background-color: #f3f4f6;
-      }
+      body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; margin: 0; }
+      .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+      /* Personnalisation des barres de défilement (Scrollbars) */
       ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
+        width: 10px;
+        height: 10px;
       }
       ::-webkit-scrollbar-track {
-        background: transparent;
+        background: #ffffff; /* Fond du rail blanc */
       }
       ::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
-        border-radius: 3px;
+        background-color: #cbd5e1; /* Couleur de la barre (gris clair) */
+        border-radius: 5px;
+        border: 2px solid #ffffff; /* Bordure blanche pour effet flottant */
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8;
+        background-color: #94a3b8; /* Plus foncé au survol */
       }
-      .animate-fade-in {
-        animation: fadeIn 0.3s ease-out;
-      }
-      @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
+      
+      /* Compatibilité Firefox */
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: #cbd5e1 #ffffff;
       }
     </style>
   <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@^19.2.3",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
     "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
     "recharts": "https://esm.sh/recharts@^3.6.0",
     "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
@@ -51,6 +52,6 @@
 </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <script type="module" src="./index.tsx"></script>
   </body>
 </html>
